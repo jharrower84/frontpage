@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --border: #f3f4f6;
+  --border-strong: #e5e7eb;
+  --text-primary: #0f0f0f;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --text-faint: #d1d5db;
+  --pink: #e8a0a0;
+  --pink-bg: #fdf2f2;
+  --pink-active: #c06060;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] {
+  --bg: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #242424;
+  --border: #2a2a2a;
+  --border-strong: #3a3a3a;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #666666;
+  --text-faint: #444444;
+  --pink: #e8a0a0;
+  --pink-bg: #2a1a1a;
+  --pink-active: #e8a0a0;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--text-primary);
+}
+
+a { color: inherit; text-decoration: none; }
+
+.prose h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0; }
+.prose h2 { font-size: 1.5em; font-weight: 700; margin: 0.5em 0; }
+.prose h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0; }
+.prose ul { list-style-type: disc; padding-left: 1.5em; margin: 0.5em 0; }
+.prose ol { list-style-type: decimal; padding-left: 1.5em; margin: 0.5em 0; }
+.prose li { margin: 0.25em 0; }
+.prose blockquote { border-left: 3px solid var(--pink); padding-left: 1em; color: var(--text-secondary); font-style: italic; margin: 1em 0; }
+.prose p { margin: 0.5em 0; }
+.prose strong { font-weight: 700; }
+.prose em { font-style: italic; }
+.prose u { text-decoration: underline; }
+.tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; color: var(--text-faint); pointer-events: none; height: 0; }
+
+/* ── Dark mode Tailwind overrides ── */
+[data-theme="dark"] .text-black { color: var(--text-primary) !important; }
+[data-theme="dark"] .text-gray-800 { color: var(--text-primary) !important; }
+[data-theme="dark"] .text-gray-700 { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-gray-600 { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-gray-500 { color: var(--text-tertiary) !important; }
+[data-theme="dark"] .text-gray-400 { color: var(--text-tertiary) !important; }
+
+[data-theme="dark"] .bg-white { background-color: var(--bg) !important; }
+[data-theme="dark"] .bg-gray-50 { background-color: var(--bg-secondary) !important; }
+[data-theme="dark"] .bg-gray-100 { background-color: var(--bg-tertiary) !important; }
+
+[data-theme="dark"] .border-gray-100 { border-color: var(--border) !important; }
+[data-theme="dark"] .border-gray-200 { border-color: var(--border-strong) !important; }
+[data-theme="dark"] .divide-gray-100 > * + * { border-color: var(--border) !important; }
+
+/* Black buttons invert in dark mode */
+[data-theme="dark"] .bg-black {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+[data-theme="dark"] .bg-black * { color: #000000 !important; }
+[data-theme="dark"] .hover\:bg-gray-800:hover { background-color: #e5e5e5 !important; }
+
+/* Black borders/tabs invert */
+[data-theme="dark"] .border-black { border-color: var(--text-primary) !important; }
+[data-theme="dark"] .border-b-2 { border-color: var(--text-primary) !important; }
+
+/* Links */
+[data-theme="dark"] a.text-black { color: var(--text-primary) !important; }
+[data-theme="dark"] a.font-medium { color: var(--text-primary) !important; }
+[data-theme="dark"] a.font-semibold { color: var(--text-primary) !important; }
+
+/* Inputs */
+[data-theme="dark"] input:not([type="file"]),
+[data-theme="dark"] textarea {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-strong) !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* Pink buttons must keep white text in both modes */
+[data-theme="dark"] [style*="e8a0a0"] { color: #ffffff !important; }
+
+[data-theme="light"] .bg-black {
+  color: #ffffff !important;
+}
+[data-theme="light"] .bg-black * {
+  color: #ffffff !important;
 }
