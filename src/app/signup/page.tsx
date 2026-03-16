@@ -44,17 +44,6 @@ export default function SignUpPage() {
         setLoading(false);
         return;
       }
-
-      // Send welcome email
-      try {
-        await fetch("/api/send-signup-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, fullName }),
-        });
-      } catch (e) {
-        console.error("Signup welcome email failed:", e);
-      }
     }
 
     router.push("/onboarding");
@@ -62,7 +51,6 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen bg-white flex">
-
       <div className="hidden lg:flex w-1/2 items-center justify-center p-12" style={{ backgroundColor: "#fdf2f2" }}>
         <div className="max-w-sm">
           <h1 className="text-4xl font-bold text-black mb-4 leading-tight">
@@ -76,7 +64,6 @@ export default function SignUpPage() {
 
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
-
           <Link href="/" className="text-xl font-bold text-black block mb-10">
             FrontPage
           </Link>
@@ -126,7 +113,6 @@ export default function SignUpPage() {
             Already have an account?{" "}
             <Link href="/signin" className="text-black font-medium hover:underline">Sign in</Link>
           </p>
-
         </div>
       </div>
     </div>

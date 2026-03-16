@@ -1,33 +1,95 @@
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(req: Request) {
-  const { email, fullName } = await req.json();
+  const { email, fullName, interests, userId } = await req.json();
+
+  // Get recommended writers based on interests
+  let recommendedWriters: any[] = [];
+
+  if (interests && interests.length > 0) {
+    const { data } = await supabaseAdmin.rpc("get_recommended_writers", {
+      interest_tags: interests,
+      exclude_id: userId,
+    });
+    recommendedWriters = data || [];
+  }
+
+  // Fall back to most prolific writers if no interest matches
+  if (recommendedWriters.length < 3) {
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, username, avatar_url, bio")
+      .neq("id", userId)
+      .limit(4);
+    recommendedWriters = data || [];
+  }
+
+  const interestTags = interests && interests.length > 0
+    ? interests.map((i: string) => `<span style="display:inline-block;background:#fdf2f2;color:#c06060;padding:3px 10px;border-radius:999px;font-size:12px;margin:2px;">${i}</span>`).join(" ")
+    : "";
+
+  const writerCards = recommendedWriters.slice(0, 3).map((w: any) => `
+    <a href="https://frontpageapp.com/profile/${w.username}" style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #f3f4f6;border-radius:12px;margin-bottom:8px;text-decoration:none;">
+      <div style="width:40px;height:40px;border-radius:50%;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-weight:700;color:#c06060;font-size:16px;flex-shrink:0;">
+        ${w.avatar_url
+          ? `<img src="${w.avatar_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" />`
+          : w.full_name?.[0]?.toUpperCase()
+        }
+      </div>
+      <div>
+        <p style="margin:0;font-weight:600;color:#0f0f0f;font-size:14px;">${w.full_name}</p>
+        <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.4;">${w.bio || ""}</p>
+      </div>
+    </a>
+  `).join("");
 
   await resend.emails.send({
     from: "FrontPage <hello@frontpageapp.com>",
     to: email,
-    subject: "Welcome to FrontPage",
+    subject: `Welcome to FrontPage, ${fullName} 👋`,
     html: `
-      <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 24px;">
-        <p style="font-size: 24px; font-weight: 700; color: #0f0f0f; margin-bottom: 16px;">Welcome to FrontPage, ${fullName}! 👋</p>
-        <p style="font-size: 15px; color: #555; line-height: 1.6; margin-bottom: 24px;">
-          You've just joined the home for independent fashion writing. Here's what you can do:
+      <div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#ffffff;">
+
+        <p style="font-size:28px;font-weight:700;color:#0f0f0f;margin:0 0 8px;">Welcome to FrontPage</p>
+        <p style="font-size:15px;color:#6b7280;margin:0 0 32px;line-height:1.6;">
+          Hi ${fullName}, your account is ready. You're now part of the home for independent fashion writing.
         </p>
-        <div style="background: #fdf2f2; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;">
-          <p style="margin: 0 0 12px; font-size: 14px; color: #333;">✍️ <strong>Write</strong> — publish your fashion perspective to the world</p>
-          <p style="margin: 0 0 12px; font-size: 14px; color: #333;">📖 <strong>Read</strong> — discover writers who actually know fashion</p>
-          <p style="margin: 0; font-size: 14px; color: #333;">🔔 <strong>Subscribe</strong> — follow your favourites and never miss a post</p>
+
+        ${interestTags ? `
+        <div style="margin-bottom:32px;">
+          <p style="font-size:13px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 10px;">Your interests</p>
+          <div>${interestTags}</div>
+          <p style="font-size:13px;color:#9ca3af;margin:10px 0 0;">Your For You feed is already personalised around these topics.</p>
         </div>
+        ` : ""}
+
+        ${writerCards ? `
+        <div style="margin-bottom:32px;">
+          <p style="font-size:13px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 12px;">Writers you might like</p>
+          ${writerCards}
+        </div>
+        ` : ""}
+
         <a href="https://frontpageapp.com/explore"
-          style="display: inline-block; background: #e8a0a0; color: white; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-weight: 600; font-size: 14px; margin-bottom: 32px;">
-          Explore FrontPage →
+          style="display:inline-block;background:#e8a0a0;color:white;padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;margin-bottom:40px;">
+          Start reading →
         </a>
-        <p style="font-size: 12px; color: #aaa; margin-top: 40px; border-top: 1px solid #f3f4f6; padding-top: 24px;">
-          You're receiving this because you created an account on FrontPage.
-        </p>
+
+        <div style="border-top:1px solid #f3f4f6;padding-top:24px;">
+          <p style="font-size:12px;color:#9ca3af;margin:0;">
+            You're receiving this because you created an account on FrontPage.<br/>
+            <a href="https://frontpageapp.com" style="color:#9ca3af;">frontpageapp.com</a>
+          </p>
+        </div>
       </div>
     `,
   });

@@ -22,6 +22,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -34,6 +35,7 @@ export default function OnboardingPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push("/signin"); return; }
       setUserId(user.id);
+      setUserEmail(user.email ?? null);
       supabase.from("profiles").select("*").eq("id", user.id).single()
         .then(({ data }) => {
           if (data) {
@@ -102,6 +104,24 @@ export default function OnboardingPage() {
       );
     }
 
+    // Send personalised welcome email
+    if (userEmail) {
+      try {
+        await fetch("/api/send-signup-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userEmail,
+            fullName,
+            interests,
+            userId,
+          }),
+        });
+      } catch (e) {
+        console.error("Welcome email failed:", e);
+      }
+    }
+
     setSaving(false);
     router.push("/");
   };
@@ -111,7 +131,6 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
-      {/* Progress bar */}
       <div className="h-1 bg-gray-100">
         <div className="h-full transition-all duration-500" style={{ width: progressWidth, backgroundColor: "#e8a0a0" }} />
       </div>
