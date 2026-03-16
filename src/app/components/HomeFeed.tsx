@@ -12,7 +12,8 @@ interface Post {
   published_at: string;
   cover_image: string | null;
   tags: string[];
-  profiles: {
+  author_id?: string;
+  profiles?: {
     full_name: string;
     username: string;
     avatar_url: string | null;
@@ -64,7 +65,6 @@ export default function HomeFeed() {
       setPosts((data as any) || []);
 
     } else if (feedTab === "for-you") {
-      // Interest-based — filter by user's selected tags
       if (userInterests.length > 0) {
         const { data } = await supabase
           .from("posts")
@@ -74,7 +74,6 @@ export default function HomeFeed() {
           .order("published_at", { ascending: false })
           .limit(20);
 
-        // If not enough interest-based posts, fill with latest
         if ((data?.length || 0) < 5) {
           const { data: fallback } = await supabase
             .from("posts")
@@ -87,7 +86,6 @@ export default function HomeFeed() {
           setPosts((data as any) || []);
         }
       } else {
-        // No interests set — show latest
         const { data } = await supabase
           .from("posts")
           .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
@@ -96,6 +94,44 @@ export default function HomeFeed() {
           .limit(20);
         setPosts((data as any) || []);
       }
+
+    } else if (feedTab === "tailored" && uid) {
+      // Use the scoring function
+      const { data: scoredPosts, error } = await supabase
+        .rpc("get_tailored_feed", {
+          p_user_id: uid,
+          p_limit: 20,
+        });
+
+      if (error || !scoredPosts || scoredPosts.length === 0) {
+        // Fall back to interest-based if scoring fails or no results
+        const { data: fallback } = await supabase
+          .from("posts")
+          .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
+          .eq("published", true)
+          .order("published_at", { ascending: false })
+          .limit(20);
+        setPosts((fallback as any) || []);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch profiles for scored posts
+      const authorIds = [...new Set(scoredPosts.map((p: any) => p.author_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, avatar_url")
+        .in("id", authorIds);
+
+      const profileMap: Record<string, any> = {};
+      profiles?.forEach((p) => { profileMap[p.id] = p; });
+
+      const enriched = scoredPosts.map((p: any) => ({
+        ...p,
+        profiles: profileMap[p.author_id] || null,
+      }));
+
+      setPosts(enriched);
     }
 
     setLoading(false);
@@ -113,7 +149,7 @@ export default function HomeFeed() {
 
   const handleTabChange = (t: "for-you" | "following" | "tailored") => {
     setTab(t);
-    if (t !== "tailored") loadFeed(userId, t);
+    if (userId) loadFeed(userId, t);
   };
 
   const formatDate = (d: string) =>
@@ -150,143 +186,127 @@ export default function HomeFeed() {
           ))}
         </div>
 
-        {/* Tailored placeholder */}
-        {tab === "tailored" && (
-          <div style={{ textAlign: "center", padding: "80px 24px" }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>✨</div>
-            <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>
-              Tailored is coming soon
-            </h2>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", maxWidth: "360px", margin: "0 auto 24px", lineHeight: 1.6 }}>
-              Tailored will use your reading history, likes, and bookmarks to surface the articles most likely to resonate with you — going beyond topics to understand your actual taste.
-            </p>
-            <Link href="/explore"
-              style={{ fontSize: "14px", color: "var(--pink)", fontWeight: 500, textDecoration: "none" }}>
-              Explore articles in the meantime →
-            </Link>
+        {/* Feed */}
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            {[...Array(3)].map((_, i) => (
+              <div key={i} style={{ height: "192px", borderRadius: "16px", background: "var(--bg-tertiary)" }} />
+            ))}
           </div>
-        )}
-
-        {/* For You / Following feed */}
-        {tab !== "tailored" && (
+        ) : posts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <p style={{ color: "var(--text-tertiary)", fontSize: "14px" }}>
+              {tab === "following"
+                ? "Subscribe to writers to see their posts here."
+                : tab === "tailored"
+                ? "Not enough activity yet to tailor your feed. Like and save some articles first."
+                : interests.length === 0
+                ? "Set your interests in Settings to personalise this feed."
+                : "No posts matching your interests yet."}
+            </p>
+            {tab === "following" && (
+              <Link href="/explore" style={{ fontSize: "14px", color: "var(--text-primary)", fontWeight: 500, display: "block", marginTop: "8px" }}>
+                Discover writers →
+              </Link>
+            )}
+            {tab === "for-you" && interests.length === 0 && (
+              <Link href="/settings" style={{ fontSize: "14px", color: "var(--text-primary)", fontWeight: 500, display: "block", marginTop: "8px" }}>
+                Update your interests →
+              </Link>
+            )}
+            {tab === "tailored" && (
+              <Link href="/explore" style={{ fontSize: "14px", color: "var(--text-primary)", fontWeight: 500, display: "block", marginTop: "8px" }}>
+                Explore articles →
+              </Link>
+            )}
+          </div>
+        ) : (
           <>
-            {loading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} style={{ height: "192px", borderRadius: "16px", background: "var(--bg-tertiary)" }} />
-                ))}
-              </div>
-            ) : posts.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "80px 0" }}>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "14px" }}>
-                  {tab === "following"
-                    ? "Subscribe to writers to see their posts here."
-                    : interests.length === 0
-                    ? "Set your interests in Settings to personalise this feed."
-                    : "No posts matching your interests yet."}
-                </p>
-                {tab === "following" && (
-                  <Link href="/explore" style={{ fontSize: "14px", color: "var(--text-primary)", fontWeight: 500, display: "block", marginTop: "8px" }}>
-                    Discover writers →
-                  </Link>
-                )}
-                {tab === "for-you" && interests.length === 0 && (
-                  <Link href="/settings" style={{ fontSize: "14px", color: "var(--text-primary)", fontWeight: 500, display: "block", marginTop: "8px" }}>
-                    Update your interests →
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Hero */}
-                {hero && (
-                  <Link href={`/p/${hero.slug}`} style={{ display: "block", marginBottom: "40px" }} className="group">
-                    {hero.cover_image ? (
-                      <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", height: "288px" }}>
-                        <img src={hero.cover_image} alt={hero.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-105 transition-transform duration-500" />
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0.1), transparent)" }} />
-                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                            {hero.profiles?.avatar_url ? (
-                              <img src={hero.profiles.avatar_url} style={{ width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover" }} alt="" />
-                            ) : (
-                              <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#e8a0a0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#c06060" }}>
-                                {hero.profiles?.full_name?.[0]?.toUpperCase()}
-                              </div>
-                            )}
-                            <span style={{ color: "rgba(255,255,255,0.8)", fontSize: "12px" }}>{hero.profiles?.full_name}</span>
-                            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>·</span>
-                            <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px" }}>{formatDate(hero.published_at)}</span>
-                          </div>
-                          <h2 style={{ color: "white", fontSize: "24px", fontWeight: 700, lineHeight: 1.3 }}>{hero.title}</h2>
-                          {hero.subtitle && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px", marginTop: "4px" }}>{hero.subtitle}</p>}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ borderRadius: "16px", background: "var(--bg-secondary)", padding: "32px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            {hero && (
+              <Link href={`/p/${hero.slug}`} style={{ display: "block", marginBottom: "40px" }} className="group">
+                {hero.cover_image ? (
+                  <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", height: "288px" }}>
+                    <img src={hero.cover_image} alt={hero.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-105 transition-transform duration-500" />
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0.1), transparent)" }} />
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                        {hero.profiles?.avatar_url ? (
+                          <img src={hero.profiles.avatar_url} style={{ width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover" }} alt="" />
+                        ) : (
                           <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#e8a0a0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#c06060" }}>
                             {hero.profiles?.full_name?.[0]?.toUpperCase()}
                           </div>
-                          <span style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>{hero.profiles?.full_name}</span>
+                        )}
+                        <span style={{ color: "rgba(255,255,255,0.8)", fontSize: "12px" }}>{hero.profiles?.full_name}</span>
+                        <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>·</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px" }}>{formatDate(hero.published_at)}</span>
+                      </div>
+                      <h2 style={{ color: "white", fontSize: "24px", fontWeight: 700, lineHeight: 1.3 }}>{hero.title}</h2>
+                      {hero.subtitle && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px", marginTop: "4px" }}>{hero.subtitle}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ borderRadius: "16px", background: "var(--bg-secondary)", padding: "32px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                      <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#e8a0a0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#c06060" }}>
+                        {hero.profiles?.full_name?.[0]?.toUpperCase()}
+                      </div>
+                      <span style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>{hero.profiles?.full_name}</span>
+                    </div>
+                    <h2 style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.3 }}>{hero.title}</h2>
+                    {hero.subtitle && <p style={{ color: "var(--text-secondary)", marginTop: "8px" }}>{hero.subtitle}</p>}
+                  </div>
+                )}
+              </Link>
+            )}
+
+            <div>
+              {rest.map((post, i) => (
+                <article key={post.id} style={{ padding: "20px 0", display: "flex", gap: "16px", alignItems: "flex-start", borderTop: i === 0 ? "none" : `1px solid var(--border)` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      {post.profiles?.avatar_url ? (
+                        <img src={post.profiles.avatar_url} style={{ width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt="" />
+                      ) : (
+                        <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#e8a0a0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#c06060", flexShrink: 0 }}>
+                          {post.profiles?.full_name?.[0]?.toUpperCase() || "A"}
                         </div>
-                        <h2 style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.3 }}>{hero.title}</h2>
-                        {hero.subtitle && <p style={{ color: "var(--text-secondary)", marginTop: "8px" }}>{hero.subtitle}</p>}
+                      )}
+                      <Link href={`/profile/${post.profiles?.username}`} style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-primary)" }}>
+                        {post.profiles?.full_name}
+                      </Link>
+                      <span style={{ color: "var(--text-faint)", fontSize: "12px" }}>·</span>
+                      <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
+                    </div>
+                    <Link href={`/p/${post.slug}`}>
+                      <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.4, marginBottom: "4px" }} className="hover:underline">
+                        {post.title}
+                      </h2>
+                      {post.subtitle && (
+                        <p style={{ fontSize: "14px", color: "var(--text-secondary)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {post.subtitle}
+                        </p>
+                      )}
+                    </Link>
+                    {post.tags?.length > 0 && (
+                      <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                        {post.tags.slice(0, 2).map((tag) => (
+                          <Link key={tag} href={`/explore?tag=${encodeURIComponent(tag)}`}
+                            style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "999px", background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}>
+                            {tag}
+                          </Link>
+                        ))}
                       </div>
                     )}
-                  </Link>
-                )}
-
-                {/* Feed list */}
-                <div>
-                  {rest.map((post, i) => (
-                    <article key={post.id} style={{ padding: "20px 0", display: "flex", gap: "16px", alignItems: "flex-start", borderTop: i === 0 ? "none" : `1px solid var(--border)` }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                          {post.profiles?.avatar_url ? (
-                            <img src={post.profiles.avatar_url} style={{ width: "20px", height: "20px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} alt="" />
-                          ) : (
-                            <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#e8a0a0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#c06060", flexShrink: 0 }}>
-                              {post.profiles?.full_name?.[0]?.toUpperCase() || "A"}
-                            </div>
-                          )}
-                          <Link href={`/profile/${post.profiles?.username}`} style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-primary)" }}>
-                            {post.profiles?.full_name}
-                          </Link>
-                          <span style={{ color: "var(--text-faint)", fontSize: "12px" }}>·</span>
-                          <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
-                        </div>
-                        <Link href={`/p/${post.slug}`}>
-                          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.4, marginBottom: "4px" }} className="hover:underline">
-                            {post.title}
-                          </h2>
-                          {post.subtitle && (
-                            <p style={{ fontSize: "14px", color: "var(--text-secondary)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                              {post.subtitle}
-                            </p>
-                          )}
-                        </Link>
-                        {post.tags?.length > 0 && (
-                          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                            {post.tags.slice(0, 2).map((tag) => (
-                              <Link key={tag} href={`/explore?tag=${encodeURIComponent(tag)}`}
-                                style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "999px", background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}>
-                                {tag}
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {post.cover_image && (
-                        <Link href={`/p/${post.slug}`} style={{ flexShrink: 0 }}>
-                          <img src={post.cover_image} alt={post.title} style={{ width: "96px", height: "64px", objectFit: "cover", borderRadius: "12px" }} />
-                        </Link>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </>
-            )}
+                  </div>
+                  {post.cover_image && (
+                    <Link href={`/p/${post.slug}`} style={{ flexShrink: 0 }}>
+                      <img src={post.cover_image} alt={post.title} style={{ width: "96px", height: "64px", objectFit: "cover", borderRadius: "12px" }} />
+                    </Link>
+                  )}
+                </article>
+              ))}
+            </div>
           </>
         )}
       </div>
