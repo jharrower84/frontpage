@@ -236,7 +236,7 @@ export default function AdminPage() {
     <div className="max-w-5xl mx-auto px-6 py-10">
 
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: "#e8a0a0" }}>A</div>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: "#2979FF" }}>A</div>
         <div>
           <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Admin</h1>
           <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>FrontPage platform management</p>
@@ -275,7 +275,7 @@ export default function AdminPage() {
               <div key={s.label} className="border border-gray-100 rounded-2xl p-5" style={{ borderColor: "var(--border)" }}>
                 <p className="text-3xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>{s.value}</p>
                 <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>{s.label}</p>
-                {s.sub && <p className="text-xs mt-1" style={{ color: "var(--pink)" }}>{s.sub}</p>}
+                {s.sub && <p className="text-xs mt-1" style={{ color: "#2979FF" }}>{s.sub}</p>}
               </div>
             ))}
           </div>
@@ -341,14 +341,14 @@ export default function AdminPage() {
           ) : (
             <div className="space-y-4">
               {reports.map((report) => (
-                <div key={report.id} className="border rounded-2xl p-4" style={{ borderColor: report.status === "pending" ? "#e8a0a0" : "var(--border)", background: "var(--bg)" }}>
+                <div key={report.id} className="border rounded-2xl p-4" style={{ borderColor: report.status === "pending" ? "#2979FF" : "var(--border)", background: "var(--bg)" }}>
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                           style={{
-                            background: report.status === "pending" ? "#fdf2f2" : "var(--bg-tertiary)",
-                            color: report.status === "pending" ? "#c06060" : "var(--text-tertiary)"
+                            background: report.status === "pending" ? "var(--blue-bg)" : "var(--bg-tertiary)",
+                            color: report.status === "pending" ? "#2979FF" : "var(--text-tertiary)"
                           }}>
                           {report.status}
                         </span>
@@ -385,7 +385,7 @@ export default function AdminPage() {
                       )}
                       <button onClick={() => resolveReport(report.id)}
                         className="text-xs px-3 py-1.5 rounded-lg text-white transition-colors"
-                        style={{ backgroundColor: "#e8a0a0" }}>
+                        style={{ backgroundColor: "#2979FF" }}>
                         Mark resolved
                       </button>
                     </div>
@@ -422,7 +422,7 @@ export default function AdminPage() {
                     <button onClick={() => toggleFeatured(post.id, post.featured)}
                       className="text-xs px-3 py-1.5 rounded-lg border transition-colors shrink-0"
                       style={post.featured
-                        ? { backgroundColor: "#e8a0a0", borderColor: "#e8a0a0", color: "white" }
+                        ? { backgroundColor: "#2979FF", borderColor: "#2979FF", color: "white" }
                         : { borderColor: "var(--border-strong)", color: "var(--text-secondary)" }
                       }>
                       {post.featured ? "✓ Featured" : "Feature"}

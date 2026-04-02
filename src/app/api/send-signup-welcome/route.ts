@@ -34,12 +34,12 @@ export async function POST(req: Request) {
   }
 
   const interestTags = interests && interests.length > 0
-    ? interests.map((i: string) => `<span style="display:inline-block;background:#fdf2f2;color:#c06060;padding:3px 10px;border-radius:999px;font-size:12px;margin:2px;">${i}</span>`).join(" ")
+    ? interests.map((i: string) => `<span style="display:inline-block;background:var(--blue-bg);color:#2979FF;padding:3px 10px;border-radius:999px;font-size:12px;margin:2px;">${i}</span>`).join(" ")
     : "";
 
   const writerCards = recommendedWriters.slice(0, 3).map((w: any) => `
     <a href="https://frontpageapp.com/profile/${w.username}" style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #f3f4f6;border-radius:12px;margin-bottom:8px;text-decoration:none;">
-      <div style="width:40px;height:40px;border-radius:50%;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-weight:700;color:#c06060;font-size:16px;flex-shrink:0;">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--blue-bg);display:flex;align-items:center;justify-content:center;font-weight:700;color:#2979FF;font-size:16px;flex-shrink:0;">
         ${w.avatar_url
           ? `<img src="${w.avatar_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" />`
           : w.full_name?.[0]?.toUpperCase()
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         ` : ""}
 
         <a href="https://frontpageapp.com/explore"
-          style="display:inline-block;background:#e8a0a0;color:white;padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;margin-bottom:40px;">
+          style="display:inline-block;background:#2979FF;color:white;padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;margin-bottom:40px;">
           Start reading →
         </a>
 

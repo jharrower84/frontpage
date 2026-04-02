@@ -211,7 +211,7 @@ export default function StatsPage() {
                             className="w-full rounded-sm transition-all"
                             style={{
                               height: `${Math.max(2, (point.views / maxViews) * 100)}%`,
-                              backgroundColor: point.views > 0 ? "#e8a0a0" : "#f3f4f6",
+                              backgroundColor: point.views > 0 ? "#2979FF" : "#f3f4f6",
                             }}
                           />
                           {/* Tooltip */}

@@ -71,7 +71,7 @@ export default async function PublicWriterAboutPage({
           </div>
           <Link href="/signup"
             className="inline-block px-6 py-2.5 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: "#e8a0a0" }}>
+            style={{ backgroundColor: "#2979FF" }}>
             Subscribe
           </Link>
         </div>

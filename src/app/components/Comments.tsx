@@ -176,7 +176,7 @@ export default function Comments({ postId, authorId, postSlug, postTitle }: Prop
                 autoFocus />
               <button onClick={() => submitComment(replyText, comment.id)} disabled={!replyText.trim() || submitting}
                 className="text-xs px-3 py-2 rounded-xl text-white font-medium disabled:opacity-40"
-                style={{ backgroundColor: "#e8a0a0" }}>
+                style={{ backgroundColor: "#2979FF" }}>
                 Reply
               </button>
               <button onClick={() => setReplyingTo(null)} className="text-xs px-2 py-2" style={{ color: "var(--text-tertiary)" }}>
@@ -218,7 +218,7 @@ export default function Comments({ postId, authorId, postSlug, postTitle }: Prop
             {newComment.trim() && (
               <button onClick={() => submitComment(newComment)} disabled={submitting}
                 className="mt-2 text-xs px-4 py-2 rounded-xl text-white font-medium disabled:opacity-40"
-                style={{ backgroundColor: "#e8a0a0" }}>
+                style={{ backgroundColor: "#2979FF" }}>
                 {submitting ? "Posting..." : "Post comment"}
               </button>
             )}

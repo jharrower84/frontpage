@@ -126,7 +126,7 @@ export default function NotesPage() {
             {newNote.trim() && (
               <button onClick={postNote} disabled={posting}
                 className="mt-2 text-sm px-5 py-2 rounded-full text-white font-semibold disabled:opacity-40"
-                style={{ backgroundColor: "#e8a0a0" }}>
+                style={{ backgroundColor: "#2979FF" }}>
                 {posting ? "Posting..." : "Post note"}
               </button>
             )}

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
           You'll receive their latest posts and newsletters directly here.
         </p>
         <a href="https://frontpageapp.com/profile/${authorUsername}"
-          style="display: inline-block; background: #e8a0a0; color: white; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          style="display: inline-block; background: #2979FF; color: white; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-weight: 600; font-size: 14px;">
           Visit ${publication}
         </a>
         <p style="font-size: 12px; color: #aaa; margin-top: 40px;">

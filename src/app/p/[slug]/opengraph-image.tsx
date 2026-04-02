@@ -9,7 +9,7 @@ export default function Image() {
   return new ImageResponse(
     <div
       style={{
-        background: "#fdf2f2",
+        background: "var(--blue-bg)",
         width: "100%",
         height: "100%",
         display: "flex",

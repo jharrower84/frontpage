@@ -132,7 +132,7 @@ export default function NewsletterComposer({ authorId, subscriberCount, loading 
             <p className="text-xs text-gray-300">{body.length} characters</p>
             <button onClick={handleSend} disabled={!subject.trim() || !body.trim() || sending || sent}
               className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 transition-all"
-              style={{ backgroundColor: sent ? "#86efac" : "#e8a0a0" }}>
+              style={{ backgroundColor: sent ? "#86efac" : "#2979FF" }}>
               {sent ? `✓ Sent to ${sentCount} readers` : sending ? "Sending..." : `Send to ${subscriberCount} readers`}
             </button>
           </div>

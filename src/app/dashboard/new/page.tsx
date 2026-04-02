@@ -45,17 +45,37 @@ export default function NewPostPage() {
         updated_at: new Date().toISOString(),
       }).eq("id", draftId);
     } else {
-      const { data } = await supabase.from("posts").insert({
-        title: title.trim(),
-        subtitle: subtitle.trim(),
-        content,
-        tags,
-        cover_image: coverImage,
-        author_id: user.id,
-        published: false,
-        slug,
-      }).select().single();
-      if (data) setDraftId(data.id);
+      // Check if a draft with this title already exists to avoid duplicates
+      const { data: existing } = await supabase
+        .from("posts")
+        .select("id")
+        .eq("author_id", user.id)
+        .eq("published", false)
+        .eq("title", title.trim())
+        .single();
+
+      if (existing) {
+        setDraftId(existing.id);
+        await supabase.from("posts").update({
+          subtitle: subtitle.trim(),
+          content,
+          tags,
+          cover_image: coverImage,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+      } else {
+        const { data } = await supabase.from("posts").insert({
+          title: title.trim(),
+          subtitle: subtitle.trim(),
+          content,
+          tags,
+          cover_image: coverImage,
+          author_id: user.id,
+          published: false,
+          slug,
+        }).select().single();
+        if (data) setDraftId(data.id);
+      }
     }
 
     setLastSaved(new Date());
@@ -146,7 +166,7 @@ export default function NewPostPage() {
           </button>
           <button onClick={() => handlePublish(false)} disabled={!title.trim() || publishing}
             className="text-sm px-5 py-2 rounded-full text-white font-semibold disabled:opacity-40"
-            style={{ backgroundColor: "#e8a0a0" }}>
+            style={{ backgroundColor: "#2979FF" }}>
             {publishing ? "Publishing..." : "Publish now"}
           </button>
         </div>
@@ -171,7 +191,7 @@ export default function NewPostPage() {
             onClick={() => handlePublish(true)}
             disabled={!scheduledAt || !title.trim() || publishing}
             className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold disabled:opacity-40 mt-5"
-            style={{ backgroundColor: "#e8a0a0" }}
+            style={{ backgroundColor: "#2979FF" }}
           >
             {publishing ? "Scheduling..." : "Schedule post"}
           </button>

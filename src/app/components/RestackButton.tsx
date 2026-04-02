@@ -108,7 +108,7 @@ export default function RestackButton({ postId, postTitle }: Props) {
               </button>
               <button onClick={submitRestack} disabled={submitting}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
-                style={{ backgroundColor: "#e8a0a0" }}>
+                style={{ backgroundColor: "#2979FF" }}>
                 {submitting ? "Restacking..." : "Restack"}
               </button>
             </div>

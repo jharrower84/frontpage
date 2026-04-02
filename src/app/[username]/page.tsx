@@ -1,6 +1,34 @@
 import { supabase } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import SubscribeButton from "@/app/components/SubscribeButton";
+import BlockButton from "@/app/components/BlockButton";
+import ProfilePostList from "@/app/components/ProfilePostList";
+
+function VerifiedBadge() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="inline-block shrink-0"
+      aria-label="Verified writer"
+    >
+      <circle cx="12" cy="12" r="12" fill="#6ab0e8" />
+      <path
+        d="M7 12.5l3.5 3.5 6.5-7"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export default async function PublicWriterPage({
   params,
@@ -9,7 +37,7 @@ export default async function PublicWriterPage({
 }) {
   const { username } = await params;
 
-  const reserved = ["signin", "signup", "explore", "dashboard", "notifications", "reading-list", "subscriptions", "settings", "profile", "p", "notes", "onboarding", "unsubscribe"];
+  const reserved = ["signin", "signup", "explore", "dashboard", "notifications", "reading-list", "subscriptions", "settings", "profile", "p", "notes", "onboarding", "unsubscribe", "messages", "privacy", "data-deletion"];
   if (reserved.includes(username)) notFound();
 
   const { data: profile } = await supabase
@@ -19,6 +47,26 @@ export default async function PublicWriterPage({
     .single();
 
   if (!profile) notFound();
+
+  const cookieStore = await cookies();
+  const serverSupabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  const isOwner = user?.id === profile.id;
+  const canMessage = !isOwner && profile.privacy_allow_messages !== false;
 
   const { data: posts } = await supabase
     .from("posts")
@@ -45,18 +93,9 @@ export default async function PublicWriterPage({
     });
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
 
-      {/* Nav */}
-      <nav className="border-b border-gray-100 px-8 h-16 flex items-center justify-between sticky top-0 bg-white z-10">
-        <Link href="/" className="text-xl font-bold text-black">FrontPage</Link>
-        <div className="flex items-center gap-4">
-          <Link href="/signin" className="text-sm text-gray-500 hover:text-black transition-colors">Sign in</Link>
-          <Link href="/signup" className="bg-black text-white text-sm px-4 py-2 rounded-full hover:bg-gray-800 transition-colors">
-            Get started
-          </Link>
-        </div>
-      </nav>
+      {user && <div className="h-14" />}
 
       {/* Header image */}
       {profile.publication_header && (
@@ -74,12 +113,16 @@ export default async function PublicWriterPage({
           ) : profile.avatar_url ? (
             <img src={profile.avatar_url} alt={profile.full_name} className="w-20 h-20 rounded-full object-cover mx-auto mb-4" />
           ) : (
-            <div className="w-20 h-20 rounded-full bg-pink-200 flex items-center justify-center text-3xl font-bold text-pink-700 mx-auto mb-4">
+            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center text-3xl font-bold text-gray-500 mx-auto mb-4">
               {profile.full_name?.[0]?.toUpperCase()}
             </div>
           )}
 
-          <h1 className="text-2xl font-bold text-black mb-1">{displayName}</h1>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold text-black">{displayName}</h1>
+            {profile.verified && <VerifiedBadge />}
+          </div>
+
           {profile.publication_name && (
             <p className="text-sm text-gray-400 mb-1">by {profile.full_name}</p>
           )}
@@ -91,24 +134,26 @@ export default async function PublicWriterPage({
             <span><strong className="text-black">{posts?.length || 0}</strong> posts</span>
             <span><strong className="text-black">{subscriberCount || 0}</strong> subscribers</span>
           </div>
-          <Link href="/signup"
-            className="inline-block px-6 py-2.5 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: "#e8a0a0" }}>
-            Subscribe
-          </Link>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {!isOwner && <SubscribeButton authorId={profile.id} />}
+            {canMessage && (
+              <Link
+                href={`/messages/${profile.username}`}
+                className="flex items-center gap-2 px-5 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:border-gray-400 transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Message
+              </Link>
+            )}
+            {!isOwner && <BlockButton profileId={profile.id} />}
+          </div>
         </div>
 
-        {/* Tabs — server rendered so we use anchor links */}
-        <div className="flex border-b border-gray-100 mb-8">
-          <a href={`/${username}`}
-            className="pb-3 mr-6 text-sm font-semibold text-black border-b-2 border-black">
-            Posts
-          </a>
-          <a href={`/${username}?tab=about`}
-            className="pb-3 text-sm text-gray-400 border-b-2 border-transparent hover:text-gray-600 transition-colors">
-            About
-          </a>
-        </div>
+        <div className="mb-8" style={{ borderBottom: "1px solid var(--border)" }} />
 
         {/* Pinned post */}
         {pinnedPost && (
@@ -128,28 +173,7 @@ export default async function PublicWriterPage({
         )}
 
         {/* Posts */}
-        {unpinnedPosts.length === 0 && !pinnedPost ? (
-          <p className="text-gray-400 text-center py-10">No published posts yet.</p>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {unpinnedPosts.map((post) => (
-              <article key={post.id} className="py-5 flex gap-4 items-start">
-                <div className="flex-1 min-w-0">
-                  <Link href={`/p/${post.slug}`}>
-                    <h2 className="font-bold text-black hover:underline leading-snug mb-1">{post.title}</h2>
-                    {post.subtitle && <p className="text-sm text-gray-500 line-clamp-2">{post.subtitle}</p>}
-                  </Link>
-                  <p className="text-xs text-gray-400 mt-2">{formatDate(post.published_at)}</p>
-                </div>
-                {post.cover_image && (
-                  <Link href={`/p/${post.slug}`} className="shrink-0">
-                    <img src={post.cover_image} alt={post.title} className="w-20 h-14 object-cover rounded-lg" />
-                  </Link>
-                )}
-              </article>
-            ))}
-          </div>
-        )}
+        <ProfilePostList posts={unpinnedPosts} />
       </div>
     </div>
   );

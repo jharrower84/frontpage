@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     username: username.toLowerCase().replace(/[^a-z0-9_]/g, ""),
     bio: "",
     interests: [],
+    onboarded: false,
   });
 
   if (error && !error.message.includes("duplicate")) {

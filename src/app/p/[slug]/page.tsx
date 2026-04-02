@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Comments from "@/app/components/Comments";
@@ -8,7 +10,6 @@ import SubscribeButton from "@/app/components/SubscribeButton";
 import ShareButton from "@/app/components/ShareButton";
 import RelatedArticles from "@/app/components/RelatedArticles";
 import ViewTracker from "@/app/components/ViewTracker";
-import RestackButton from "@/app/components/RestackButton";
 import ReportButton from "@/app/components/ReportButton";
 
 function getReadTime(html: string): string {
@@ -21,6 +22,29 @@ function getReadTime(html: string): string {
 function formatViews(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return n.toString();
+}
+
+function VerifiedBadge() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="inline-block shrink-0"
+      aria-label="Verified writer"
+    >
+      <circle cx="12" cy="12" r="12" fill="#6ab0e8" />
+      <path
+        d="M7 12.5l3.5 3.5 6.5-7"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export async function generateMetadata({
@@ -62,19 +86,76 @@ export async function generateMetadata({
 
 export default async function ArticlePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { slug } = await params;
+  const { preview } = await searchParams;
+  const isPreview = preview === "true";
 
-  const { data: post } = await supabase
-    .from("posts")
-    .select("*, profiles!posts_author_id_fkey(id, full_name, username, avatar_url, bio)")
-    .eq("slug", slug)
-    .eq("published", true)
-    .single();
+  const cookieStore = await cookies();
+  const serverSupabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await serverSupabase.auth.getUser();
+
+  // In preview mode, allow the author to see unpublished posts
+  let post: any = null;
+ if (isPreview && user) {
+    const { data } = await serverSupabase
+      .from("posts")
+      .select("*, profiles!posts_author_id_fkey(id, full_name, username, avatar_url, bio, verified)")
+      .eq("slug", slug)
+      .eq("author_id", user.id)
+      .single();
+    post = data;
+  }
+
+  // Fall back to published post if not preview or not found
+  if (!post) {
+    const { data } = await supabase
+      .from("posts")
+      .select("*, profiles!posts_author_id_fkey(id, full_name, username, avatar_url, bio, verified)")
+      .eq("slug", slug)
+      .eq("published", true)
+      .single();
+    post = data;
+  }
 
   if (!post) notFound();
+
+  let canViewSubscriberContent = false;
+  if (post.subscriber_only) {
+    if (user) {
+      if (user.id === post.author_id) {
+        canViewSubscriberContent = true;
+      } else {
+        const { data: sub } = await serverSupabase
+          .from("subscriptions")
+          .select("id")
+          .eq("subscriber_id", user.id)
+          .eq("author_id", post.author_id)
+          .single();
+        canViewSubscriberContent = !!sub;
+      }
+    }
+  } else {
+    canViewSubscriberContent = true;
+  }
 
   const { count: subscriberCount } = await supabase
     .from("subscriptions")
@@ -87,99 +168,249 @@ export default async function ArticlePage({
     });
 
   return (
-    <div className="min-h-screen bg-white">
-      <ViewTracker postId={post.id} />
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      {!isPreview && <ViewTracker postId={post.id} />}
+
+      {/* Preview banner */}
+      {isPreview && (
+        <div
+          className="w-full py-2.5 text-center text-sm font-medium"
+          style={{ background: "#2979FF", color: "white" }}
+        >
+          Preview mode — this article is not yet published.{" "}
+          <Link
+            href={`/dashboard/edit/${post.id}`}
+            className="underline hover:opacity-80"
+          >
+            Back to editor
+          </Link>
+        </div>
+      )}
 
       {post.cover_image && (
-        <div className="w-full h-80">
+        <div className="w-full h-96">
           <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover" />
         </div>
       )}
 
-      <article className="max-w-2xl mx-auto px-6 pt-10 pb-20">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-black mb-4 leading-tight">{post.title}</h1>
-          {post.subtitle && <p className="text-xl text-gray-500 mb-6">{post.subtitle}</p>}
+      <article className="max-w-2xl mx-auto px-6 pt-12 pb-32 lg:pb-24">
 
-          {post.tags && post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-6">
-              {post.tags.map((tag: string) => (
-                <Link key={tag} href={`/explore?tag=${encodeURIComponent(tag)}`}
-                  className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-500 hover:border-black hover:text-black transition-colors">
-                  {tag}
-                </Link>
-              ))}
+        {/* Title block */}
+        <div className="mb-8">
+          <h1 className="text-4xl lg:text-5xl font-bold leading-tight mb-4" style={{ color: "var(--text-primary)" }}>
+            {post.title}
+          </h1>
+          {post.subtitle && (
+            <p className="text-xl leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+              {post.subtitle}
+            </p>
+          )}
+        </div>
+
+        {/* Author block */}
+        <div className="flex items-center gap-3 mb-4">
+          {post.profiles?.avatar_url ? (
+            <img
+              src={post.profiles.avatar_url}
+              alt={post.profiles.full_name}
+              className="w-11 h-11 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-gray-500 shrink-0">
+              {post.profiles?.full_name?.[0]?.toUpperCase() || "A"}
             </div>
           )}
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {post.profiles?.avatar_url ? (
-                <img src={post.profiles.avatar_url} alt={post.profiles.full_name} className="w-10 h-10 rounded-full object-cover" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-pink-200 flex items-center justify-center text-sm font-semibold text-pink-700">
-                  {post.profiles?.full_name?.[0]?.toUpperCase() || "A"}
-                </div>
-              )}
-              <div>
-                <Link href={`/profile/${post.profiles?.username}`} className="text-sm font-medium text-black hover:underline">
-                  {post.profiles?.full_name}
-                </Link>
-                <div className="flex items-center gap-2">
-                  <p className="text-xs text-gray-400">{formatDate(post.published_at)}</p>
-                  <span className="text-gray-300 text-xs">·</span>
-                  <p className="text-xs text-gray-400">{getReadTime(post.content)}</p>
-                  {post.view_count > 0 && (
-                    <>
-                      <span className="text-gray-300 text-xs">·</span>
-                      <p className="text-xs text-gray-400">{formatViews(post.view_count)} views</p>
-                    </>
-                  )}
-                </div>
-              </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <Link
+                href={`/${post.profiles?.username}`}
+                className="text-sm font-semibold hover:underline"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {post.profiles?.full_name}
+              </Link>
+              {post.profiles?.verified && <VerifiedBadge />}
             </div>
-            <div className="flex items-center gap-3">
-              <LikeButton postId={post.id} authorId={post.author_id} />
-              <RestackButton postId={post.id} postTitle={post.title} />
-              <BookmarkButton postId={post.id} />
-              <ShareButton slug={post.slug} title={post.title} />
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+                {post.published_at ? formatDate(post.published_at) : "Draft"}
+              </span>
+              <span className="text-xs" style={{ color: "var(--text-faint)" }}>·</span>
+              <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+                {getReadTime(post.content)}
+              </span>
+              {post.view_count > 0 && (
+                <>
+                  <span className="text-xs" style={{ color: "var(--text-faint)" }}>·</span>
+                  <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+                    {formatViews(post.view_count)} views
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tags */}
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {post.tags.map((tag: string) => (
+              <Link
+                key={tag}
+                href={`/explore?tag=${encodeURIComponent(tag)}`}
+                className="text-xs px-3 py-1.5 rounded-full border transition-colors"
+                style={{ borderColor: "var(--border)", color: "var(--text-tertiary)" }}
+              >
+                {tag}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Desktop action bar — hide in preview */}
+        {!isPreview && (
+          <div
+            className="hidden lg:flex items-center gap-2 py-3 mb-8"
+            style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
+          >
+            <LikeButton postId={post.id} authorId={post.author_id} />
+            <div className="w-px h-4 mx-1" style={{ background: "var(--border)" }} />
+            <BookmarkButton postId={post.id} />
+            <ShareButton slug={post.slug} title={post.title} />
+            <div className="ml-auto">
               <ReportButton postId={post.id} />
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="border-t border-gray-100 mb-8" />
-
-        <div
-          className="prose prose-lg max-w-none text-gray-800 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: post.content }}
-        />
-
-        <div className="mt-16 p-6 rounded-2xl border border-gray-100 bg-gray-50">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              {post.profiles?.avatar_url ? (
-                <img src={post.profiles.avatar_url} alt={post.profiles.full_name} className="w-12 h-12 rounded-full object-cover shrink-0" />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-pink-200 flex items-center justify-center text-lg font-bold text-pink-700 shrink-0">
-                  {post.profiles?.full_name?.[0]?.toUpperCase()}
-                </div>
-              )}
-              <div>
-                <Link href={`/profile/${post.profiles?.username}`} className="font-semibold text-black hover:underline">
-                  {post.profiles?.full_name}
-                </Link>
-                <p className="text-xs text-gray-400 mt-0.5">{subscriberCount} subscribers</p>
-                {post.profiles?.bio && <p className="text-sm text-gray-600 mt-2">{post.profiles.bio}</p>}
+        {/* Article content or lock gate */}
+        {canViewSubscriberContent ? (
+          <>
+            <div
+              className="prose prose-lg max-w-none leading-relaxed"
+              style={{ color: "var(--text-primary)" }}
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            />
+            {post.edited_at && (
+              <p className="text-xs italic mt-6" style={{ color: "var(--text-faint)" }}>
+                Edited {new Date(post.edited_at).toLocaleDateString("en-GB", {
+                  day: "numeric", month: "long", year: "numeric",
+                })} by {post.profiles?.full_name}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="relative mb-0 overflow-hidden" style={{ maxHeight: "260px" }}>
+              <div
+                className="prose prose-lg max-w-none leading-relaxed pointer-events-none select-none"
+                style={{ color: "var(--text-primary)" }}
+                dangerouslySetInnerHTML={{ __html: post.content }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(to bottom, transparent 0%, var(--bg) 75%)" }}
+              />
+            </div>
+            <div
+              className="rounded-2xl p-8 text-center"
+              style={{ border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+            >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "#eef3ff" }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#2979FF" strokeWidth={2} className="w-6 h-6">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path strokeLinecap="round" d="M7 11V7a5 5 0 0110 0v4" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold mb-2" style={{ color: "var(--text-primary)" }}>
+                This article is for subscribers only
+              </h3>
+              <p className="text-sm mb-6" style={{ color: "var(--text-tertiary)" }}>
+                Subscribe to {post.profiles?.full_name} to read this article and get full access to their writing.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <SubscribeButton authorId={post.author_id} />
+                {!user && (
+                  <Link href="/signin" className="text-sm font-medium hover:underline" style={{ color: "var(--text-tertiary)" }}>
+                    Already a subscriber? Sign in
+                  </Link>
+                )}
               </div>
             </div>
-            <SubscribeButton authorId={post.author_id} />
+          </>
+        )}
+
+        {/* Comments and related — hide in preview */}
+        {canViewSubscriberContent && !isPreview && (
+          <>
+            <div
+              className="mt-16 p-6 rounded-2xl"
+              style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  {post.profiles?.avatar_url ? (
+                    <img
+                      src={post.profiles.avatar_url}
+                      alt={post.profiles.full_name}
+                      className="w-12 h-12 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-500 shrink-0">
+                      {post.profiles?.full_name?.[0]?.toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/${post.profiles?.username}`}
+                        className="font-semibold hover:underline"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {post.profiles?.full_name}
+                      </Link>
+                      {post.profiles?.verified && <VerifiedBadge />}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-faint)" }}>
+                      {subscriberCount} subscribers
+                    </p>
+                    {post.profiles?.bio && (
+                      <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+                        {post.profiles.bio}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <SubscribeButton authorId={post.author_id} />
+              </div>
+            </div>
+
+            <RelatedArticles currentPostId={post.id} authorId={post.author_id} tags={post.tags || []} />
+            <Comments postId={post.id} authorId={post.author_id} postSlug={post.slug} postTitle={post.title} />
+          </>
+        )}
+      </article>
+
+      {/* Mobile floating action bar — hide in preview */}
+      {!isPreview && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-6 px-6 pointer-events-none">
+          <div
+            className="flex items-center gap-6 px-8 py-3 rounded-full pointer-events-auto"
+            style={{
+              background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)",
+              border: "1px solid rgba(0,0,0,0.06)",
+            }}
+          >
+            <LikeButton postId={post.id} authorId={post.author_id} compact />
+            <BookmarkButton postId={post.id} compact />
+            <ShareButton slug={post.slug} title={post.title} compact />
+            <ReportButton postId={post.id} compact />
           </div>
         </div>
-
-        <RelatedArticles currentPostId={post.id} authorId={post.author_id} tags={post.tags || []} />
-        <Comments postId={post.id} authorId={post.author_id} postSlug={post.slug} postTitle={post.title} />
-      </article>
+      )}
     </div>
   );
 }

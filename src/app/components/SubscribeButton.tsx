@@ -28,60 +28,63 @@ export default function SubscribeButton({ authorId }: { authorId: string }) {
   };
 
   const handleSubscribe = async () => {
-    if (!userId) { router.push("/signin"); return; }
-    setLoading(true);
+  setLoading(true);
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { 
+    router.push("/signin"); 
+    setLoading(false);
+    return; 
+  }
 
-    if (subscribed) {
-      await supabase.from("subscriptions").delete()
-        .eq("subscriber_id", userId)
-        .eq("author_id", authorId);
-      setSubscribed(false);
-    } else {
-      await supabase.from("subscriptions").insert({
-        subscriber_id: userId,
-        author_id: authorId,
-      });
+  const currentUserId = user.id;
 
-      // Notification
-      await supabase.from("notifications").insert({
-        recipient_id: authorId,
-        actor_id: userId,
-        type: "subscribe",
-        read: false,
-      });
+  if (subscribed) {
+    await supabase.from("subscriptions").delete()
+      .eq("subscriber_id", currentUserId)
+      .eq("author_id", authorId);
+    setSubscribed(false);
+  } else {
+    await supabase.from("subscriptions").insert({
+      subscriber_id: currentUserId,
+      author_id: authorId,
+    });
 
-      // Send welcome email
-      try {
-        const [subscriberRes, authorRes] = await Promise.all([
-          supabase.from("profiles").select("full_name, email:id").eq("id", userId).single(),
-          supabase.from("profiles").select("full_name, username, publication_name").eq("id", authorId).single(),
-        ]);
+    await supabase.from("notifications").insert({
+      recipient_id: authorId,
+      actor_id: currentUserId,
+      type: "subscribe",
+      read: false,
+    });
 
-        const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const [subscriberRes, authorRes] = await Promise.all([
+        supabase.from("profiles").select("full_name").eq("id", currentUserId).single(),
+        supabase.from("profiles").select("full_name, username, publication_name").eq("id", authorId).single(),
+      ]);
 
-        if (user?.email && authorRes.data) {
-          await fetch("/api/send-welcome", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              subscriberEmail: user.email,
-              subscriberName: subscriberRes.data?.full_name,
-              authorName: authorRes.data.full_name,
-              authorUsername: authorRes.data.username,
-              publicationName: authorRes.data.publication_name,
-            }),
-          });
-        }
-      } catch (e) {
-        // Email failure shouldn't block the subscribe action
-        console.error("Welcome email failed:", e);
+      if (user.email && authorRes.data) {
+        await fetch("/api/send-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscriberEmail: user.email,
+            subscriberName: subscriberRes.data?.full_name,
+            authorName: authorRes.data.full_name,
+            authorUsername: authorRes.data.username,
+            publicationName: authorRes.data.publication_name,
+          }),
+        });
       }
-
-      setSubscribed(true);
+    } catch (e) {
+      console.error("Welcome email failed:", e);
     }
 
-    setLoading(false);
-  };
+    setSubscribed(true);
+  }
+
+  setLoading(false);
+};
 
   return (
     <button
@@ -90,7 +93,7 @@ export default function SubscribeButton({ authorId }: { authorId: string }) {
       className="px-5 py-2 rounded-full text-sm font-semibold border transition-colors disabled:opacity-40"
       style={subscribed
         ? { borderColor: "#e5e7eb", color: "#6b7280" }
-        : { backgroundColor: "#e8a0a0", borderColor: "#e8a0a0", color: "white" }
+        : { backgroundColor: "#2979FF", borderColor: "#2979FF", color: "white" }
       }
     >
       {loading ? "..." : subscribed ? "Subscribed" : "Subscribe"}

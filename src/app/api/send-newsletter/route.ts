@@ -20,7 +20,7 @@ export async function POST(req: Request) {
             <div style="font-size: 15px; color: #333; line-height: 1.7; white-space: pre-wrap;">${body}</div>
             <div style="border-top: 1px solid #f3f4f6; margin-top: 40px; padding-top: 24px;">
               <a href="https://frontpageapp.com/profile/${authorUsername}"
-                style="font-size: 13px; color: #e8a0a0; text-decoration: none; font-weight: 600;">
+                style="font-size: 13px; color: #2979FF; text-decoration: none; font-weight: 600;">
                 Read more from ${publication} →
               </a>
             </div>
