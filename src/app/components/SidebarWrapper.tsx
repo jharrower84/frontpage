@@ -12,7 +12,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
   const [loggedIn, setLoggedIn] = useState(false);
   const [checked, setChecked] = useState(false);
 
-  const noChrome = ["/signin", "/signup"].includes(pathname) || pathname.startsWith("/onboarding") || (pathname === "/" && !loggedIn);
+  const noChrome = ["/signin", "/signup", "/reset-password"].includes(pathname) || pathname.startsWith("/onboarding") || (pathname === "/" && !loggedIn);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
