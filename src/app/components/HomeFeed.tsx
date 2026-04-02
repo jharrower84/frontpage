@@ -206,9 +206,9 @@ export default function HomeFeed() {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "14px", marginTop: "10px", flexWrap: "wrap" }}>
         {tags && tags.length > 0 && tags.slice(0, 3).map((tag) => (
-          <Link
+          <span
             key={tag}
-            href={`/explore?tag=${encodeURIComponent(tag)}`}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/explore?tag=${encodeURIComponent(tag)}`; }}
             style={{
               fontSize: "11px", fontWeight: 500,
               color: "var(--text-secondary)",
@@ -216,11 +216,12 @@ export default function HomeFeed() {
               border: "1px solid var(--border)",
               borderRadius: "6px", padding: "2px 8px",
               textDecoration: "none",
+              cursor: "pointer",
             }}
             className="hover:!text-blue-500 transition-colors"
           >
             {tag}
-          </Link>
+          </span>
         ))}
         <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", color: "#2979FF" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} style={{ width: 13, height: 13 }}>
@@ -249,9 +250,9 @@ export default function HomeFeed() {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
         {post.tags && post.tags.length > 0 && post.tags.slice(0, 3).map((tag) => (
-          <Link
+          <span
             key={tag}
-            href={`/explore?tag=${encodeURIComponent(tag)}`}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/explore?tag=${encodeURIComponent(tag)}`; }}
             style={{
               fontSize: "11px", fontWeight: 500,
               color: "rgba(255,255,255,0.7)",
@@ -262,7 +263,7 @@ export default function HomeFeed() {
             className="hover:!text-white transition-colors"
           >
             {tag}
-          </Link>
+          </span>
         ))}
         {c && (
           <>
