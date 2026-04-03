@@ -107,17 +107,14 @@ export default function HomeFeed() {
   ) => {
     setLoading(true);
     setCounts({});
-
     const filter = (data: any[]) => data.filter((p) => !blocked.includes(p.author_id));
     let loadedPosts: Post[] = [];
 
     if (feedTab === "following" && uid) {
-      const { data: subs } = await supabase
-        .from("subscriptions").select("author_id").eq("subscriber_id", uid);
+      const { data: subs } = await supabase.from("subscriptions").select("author_id").eq("subscriber_id", uid);
       const ids = subs?.map((s) => s.author_id) ?? [];
       if (ids.length === 0) { setPosts([]); setLoading(false); return; }
-      const { data } = await supabase
-        .from("posts")
+      const { data } = await supabase.from("posts")
         .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
         .eq("published", true).in("author_id", ids)
         .order("published_at", { ascending: false }).limit(20);
@@ -125,15 +122,13 @@ export default function HomeFeed() {
 
     } else if (feedTab === "for-you") {
       if (userInterests.length > 0) {
-        const { data } = await supabase
-          .from("posts")
+        const { data } = await supabase.from("posts")
           .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
           .eq("published", true).overlaps("tags", userInterests)
           .order("published_at", { ascending: false }).limit(20);
         const filtered = filter((data as any) || []);
         if (filtered.length < 5) {
-          const { data: fallback } = await supabase
-            .from("posts")
+          const { data: fallback } = await supabase.from("posts")
             .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
             .eq("published", true).order("published_at", { ascending: false }).limit(20);
           loadedPosts = filter((fallback as any) || []);
@@ -141,32 +136,26 @@ export default function HomeFeed() {
           loadedPosts = filtered;
         }
       } else {
-        const { data } = await supabase
-          .from("posts")
+        const { data } = await supabase.from("posts")
           .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
           .eq("published", true).order("published_at", { ascending: false }).limit(20);
         loadedPosts = filter((data as any) || []);
       }
 
     } else if (feedTab === "tailored" && uid) {
-      const { data: scoredPosts, error } = await supabase.rpc("get_tailored_feed", {
-        p_user_id: uid, p_limit: 20,
-      });
+      const { data: scoredPosts, error } = await supabase.rpc("get_tailored_feed", { p_user_id: uid, p_limit: 20 });
       if (error || !scoredPosts || scoredPosts.length === 0) {
-        const { data: fallback } = await supabase
-          .from("posts")
+        const { data: fallback } = await supabase.from("posts")
           .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
           .eq("published", true).order("published_at", { ascending: false }).limit(20);
         loadedPosts = filter((fallback as any) || []);
       } else {
         const authorIds = [...new Set(scoredPosts.map((p: any) => p.author_id))];
-        const { data: profiles } = await supabase
-          .from("profiles").select("id, full_name, username, avatar_url").in("id", authorIds);
+        const { data: profiles } = await supabase.from("profiles")
+          .select("id, full_name, username, avatar_url").in("id", authorIds);
         const profileMap: Record<string, any> = {};
         profiles?.forEach((p) => { profileMap[p.id] = p; });
-        loadedPosts = filter(scoredPosts.map((p: any) => ({
-          ...p, profiles: profileMap[p.author_id] || null,
-        })));
+        loadedPosts = filter(scoredPosts.map((p: any) => ({ ...p, profiles: profileMap[p.author_id] || null })));
       }
     }
 
@@ -176,8 +165,7 @@ export default function HomeFeed() {
   };
 
   const loadTrending = async () => {
-    const { data } = await supabase
-      .from("posts")
+    const { data } = await supabase.from("posts")
       .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
       .eq("published", true).order("view_count", { ascending: false }).limit(5);
     if (data) setTrending(data as any);
@@ -209,15 +197,7 @@ export default function HomeFeed() {
           <span
             key={tag}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/explore?tag=${encodeURIComponent(tag)}`; }}
-            style={{
-              fontSize: "11px", fontWeight: 500,
-              color: "var(--text-secondary)",
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "6px", padding: "2px 8px",
-              textDecoration: "none",
-              cursor: "pointer",
-            }}
+            style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: "6px", padding: "2px 8px", cursor: "pointer" }}
             className="hover:!text-blue-500 transition-colors"
           >
             {tag}
@@ -253,13 +233,7 @@ export default function HomeFeed() {
           <span
             key={tag}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/explore?tag=${encodeURIComponent(tag)}`; }}
-            style={{
-              fontSize: "11px", fontWeight: 500,
-              color: "rgba(255,255,255,0.7)",
-              background: "rgba(255,255,255,0.15)",
-              borderRadius: "6px", padding: "2px 8px",
-              textDecoration: "none",
-            }}
+            style={{ fontSize: "11px", fontWeight: 500, color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.15)", borderRadius: "6px", padding: "2px 8px", cursor: "pointer" }}
             className="hover:!text-white transition-colors"
           >
             {tag}
@@ -292,29 +266,25 @@ export default function HomeFeed() {
   };
 
   return (
-    <div style={{
-      display: "flex",
-      gap: "48px",
-      maxWidth: "1080px",
-      margin: "0 auto",
-      padding: "36px 32px",
-    }}>
+    <div className="flex gap-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* Main feed */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Main feed — full width on mobile */}
+      <div className="flex-1 min-w-0">
 
         {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginBottom: "40px" }}>
+        <div className="flex mb-10" style={{ borderBottom: "1px solid var(--border)" }}>
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => handleTabChange(t.key)}
+              className="text-sm pb-3 mr-7 transition-colors"
               style={{
-                paddingBottom: "12px", marginRight: "28px", fontSize: "14px",
-                fontWeight: tab === t.key ? 600 : 400, border: "none",
+                fontWeight: tab === t.key ? 600 : 400,
+                border: "none",
                 borderBottom: tab === t.key ? "2px solid var(--text-primary)" : "2px solid transparent",
                 color: tab === t.key ? "var(--text-primary)" : "var(--text-tertiary)",
-                background: "none", cursor: "pointer", transition: "color 0.15s",
+                background: "none",
+                cursor: "pointer",
               }}
             >
               {t.label}
@@ -322,81 +292,67 @@ export default function HomeFeed() {
           ))}
         </div>
 
-        {/* Loading skeletons */}
         {loading ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
-            <div style={{ height: "340px", borderRadius: "16px", background: "var(--bg-tertiary)" }} />
+          <div className="flex flex-col gap-8">
+            <div className="rounded-2xl h-64 sm:h-80 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
             {[...Array(3)].map((_, i) => (
-              <div key={i} style={{ display: "flex", gap: "16px", paddingTop: "28px", borderTop: "1px solid var(--border)" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ height: "12px", width: "120px", borderRadius: "6px", background: "var(--bg-tertiary)", marginBottom: "12px" }} />
-                  <div style={{ height: "22px", width: "80%", borderRadius: "6px", background: "var(--bg-tertiary)", marginBottom: "8px" }} />
-                  <div style={{ height: "14px", width: "60%", borderRadius: "6px", background: "var(--bg-tertiary)" }} />
+              <div key={i} className="flex gap-4 pt-7" style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="flex-1">
+                  <div className="h-3 w-28 rounded-md mb-3 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                  <div className="h-5 w-4/5 rounded-md mb-2 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                  <div className="h-3 w-3/5 rounded-md animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
                 </div>
-                <div style={{ width: "140px", height: "96px", borderRadius: "12px", background: "var(--bg-tertiary)", flexShrink: 0 }} />
+                <div className="rounded-xl animate-pulse shrink-0 hidden sm:block" style={{ width: 120, height: 80, background: "var(--bg-tertiary)" }} />
               </div>
             ))}
           </div>
         ) : posts.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
-            <p style={{ color: "var(--text-tertiary)", fontSize: "15px", marginBottom: "12px" }}>
-              {tab === "following"
-                ? "Subscribe to writers to see their posts here."
-                : tab === "tailored"
-                ? "Not enough activity yet. Like and save some articles first."
-                : interests.length === 0
-                ? "Set your interests in Settings to personalise this feed."
+          <div className="text-center py-20">
+            <p className="text-sm mb-3" style={{ color: "var(--text-tertiary)" }}>
+              {tab === "following" ? "Subscribe to writers to see their posts here."
+                : tab === "tailored" ? "Not enough activity yet. Like and save some articles first."
+                : interests.length === 0 ? "Set your interests in Settings to personalise this feed."
                 : "No posts matching your interests yet."}
             </p>
-            {tab === "following" && (
-              <Link href="/explore" style={{ fontSize: "14px", color: "#2979FF", fontWeight: 500 }}>Discover writers →</Link>
-            )}
-            {tab === "for-you" && interests.length === 0 && (
-              <Link href="/settings" style={{ fontSize: "14px", color: "#2979FF", fontWeight: 500 }}>Update your interests →</Link>
-            )}
-            {tab === "tailored" && (
-              <Link href="/explore" style={{ fontSize: "14px", color: "#2979FF", fontWeight: 500 }}>Explore articles →</Link>
-            )}
+            {tab === "following" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Discover writers →</Link>}
+            {tab === "for-you" && interests.length === 0 && <Link href="/settings" className="text-sm font-medium" style={{ color: "#2979FF" }}>Update your interests →</Link>}
+            {tab === "tailored" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Explore articles →</Link>}
           </div>
         ) : (
           <>
-            {/* Hero post */}
+            {/* Hero */}
             {hero && (
-              <Link href={`/p/${hero.slug}`} style={{ display: "block", marginBottom: "48px" }} className="group">
+              <Link href={`/p/${hero.slug}`} className="block mb-10 group">
                 {hero.cover_image ? (
-                  <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", height: "340px" }}>
-                    <img src={hero.cover_image} alt={hero.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-[1.02] transition-transform duration-500" />
-                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }} />
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "28px 32px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                  <div className="relative rounded-2xl overflow-hidden" style={{ height: "280px" }}>
+                    <img src={hero.cover_image} alt={hero.title} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+                    <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }} />
+                    <div className="absolute bottom-0 left-0 right-0 p-6">
+                      <div className="flex items-center gap-2 mb-2">
                         <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
-                        <span style={{ color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: 500 }}>{hero.profiles?.full_name}</span>
+                        <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{hero.profiles?.full_name}</span>
                         <span style={{ color: "rgba(255,255,255,0.35)" }}>·</span>
-                        <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "13px" }}>{formatDate(hero.published_at)}</span>
+                        <span className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{formatDate(hero.published_at)}</span>
                       </div>
-                      <h2 style={{ color: "white", fontSize: "26px", fontWeight: 700, lineHeight: 1.25, letterSpacing: "-0.02em", marginBottom: hero.subtitle ? "6px" : 0 }}>
+                      <h2 className="text-xl sm:text-2xl font-bold leading-snug mb-1" style={{ color: "white", letterSpacing: "-0.02em" }}>
                         {hero.title}
                       </h2>
                       {hero.subtitle && (
-                        <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "15px", lineHeight: 1.5 }}>{hero.subtitle}</p>
+                        <p className="text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>{hero.subtitle}</p>
                       )}
                       <HeroMeta post={hero} />
                     </div>
                   </div>
                 ) : (
-                  <div style={{ borderRadius: "16px", background: "var(--bg-secondary)", border: "1px solid var(--border)", padding: "40px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                  <div className="rounded-2xl p-8" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
+                    <div className="flex items-center gap-2 mb-4">
                       <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
-                      <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>{hero.profiles?.full_name}</span>
+                      <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>{hero.profiles?.full_name}</span>
                       <span style={{ color: "var(--text-faint)" }}>·</span>
-                      <span style={{ color: "var(--text-faint)", fontSize: "13px" }}>{formatDate(hero.published_at)}</span>
+                      <span className="text-sm" style={{ color: "var(--text-faint)" }}>{formatDate(hero.published_at)}</span>
                     </div>
-                    <h2 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.25, letterSpacing: "-0.02em", marginBottom: "8px" }}>
-                      {hero.title}
-                    </h2>
-                    {hero.subtitle && (
-                      <p style={{ color: "var(--text-secondary)", fontSize: "15px", lineHeight: 1.6 }}>{hero.subtitle}</p>
-                    )}
+                    <h2 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{hero.title}</h2>
+                    {hero.subtitle && <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{hero.subtitle}</p>}
                     <PostMeta postId={hero.id} tags={hero.tags} />
                   </div>
                 )}
@@ -406,22 +362,22 @@ export default function HomeFeed() {
             {/* Article list */}
             <div>
               {rest.map((post) => (
-                <article key={post.id} style={{ padding: "28px 0", display: "flex", gap: "20px", alignItems: "flex-start", borderTop: "1px solid var(--border)" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "10px" }}>
-                      <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={20} />
-                      <Link href={`/${post.profiles?.username}`} style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }} className="hover:underline">
+                <article key={post.id} className="flex gap-4 py-6" style={{ borderTop: "1px solid var(--border)" }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={18} />
+                      <Link href={`/${post.profiles?.username}`} className="text-xs font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
                         {post.profiles?.full_name}
                       </Link>
-                      <span style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>·</span>
-                      <span style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
+                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>·</span>
+                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
                     </div>
                     <Link href={`/p/${post.slug}`}>
-                      <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.35, letterSpacing: "-0.01em", marginBottom: "6px" }} className="hover:underline">
+                      <h2 className="font-bold mb-1 hover:underline leading-snug" style={{ fontSize: "16px", color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
                         {post.title}
                       </h2>
                       {post.subtitle && (
-                        <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        <p className="text-sm leading-relaxed line-clamp-2" style={{ color: "var(--text-secondary)" }}>
                           {post.subtitle}
                         </p>
                       )}
@@ -429,8 +385,8 @@ export default function HomeFeed() {
                     <PostMeta postId={post.id} tags={post.tags} />
                   </div>
                   {post.cover_image && (
-                    <Link href={`/p/${post.slug}`} style={{ flexShrink: 0 }}>
-                      <img src={post.cover_image} alt={post.title} style={{ width: "140px", height: "96px", objectFit: "cover", borderRadius: "10px" }} />
+                    <Link href={`/p/${post.slug}`} className="shrink-0 hidden sm:block">
+                      <img src={post.cover_image} alt={post.title} className="rounded-xl object-cover" style={{ width: 120, height: 80 }} />
                     </Link>
                   )}
                 </article>
@@ -440,32 +396,35 @@ export default function HomeFeed() {
         )}
       </div>
 
-      {/* Right sidebar */}
-      <div className="hidden lg:block" style={{ width: "220px", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-        <div style={{ position: "sticky", bottom: "32px" }}>
-          <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "20px" }}>
+      {/* Right sidebar — desktop only */}
+      <div className="hidden lg:flex flex-col w-52 shrink-0">
+        <div className="sticky bottom-8">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: "var(--text-faint)" }}>
             Trending
           </p>
-          <div style={{ display: "flex", flexDirection: "column" }}>
+          <div className="flex flex-col">
             {trending.map((post, i) => (
-              <Link key={post.id} href={`/p/${post.slug}`} style={{ display: "flex", gap: "14px", alignItems: "flex-start", padding: "14px 0", borderBottom: i < trending.length - 1 ? "1px solid var(--border)" : "none" }} className="group">
-                <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--border)", lineHeight: 1, width: "20px", flexShrink: 0, paddingTop: "2px" }}>
-                  {i + 1}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "5px" }}>
-                    <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={16} />
-                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontWeight: 500 }}>{post.profiles?.full_name}</span>
+              <Link
+                key={post.id}
+                href={`/p/${post.slug}`}
+                className="flex gap-3 items-start py-3 group"
+                style={{ borderBottom: i < trending.length - 1 ? "1px solid var(--border)" : "none" }}
+              >
+                <span className="text-lg font-bold shrink-0 pt-0.5" style={{ color: "var(--border)", width: 20 }}>{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={14} />
+                    <span className="text-xs font-medium" style={{ color: "var(--text-tertiary)" }}>{post.profiles?.full_name}</span>
                   </div>
-                  <h4 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }} className="group-hover:underline">
+                  <h4 className="text-xs font-semibold leading-snug line-clamp-2 group-hover:underline" style={{ color: "var(--text-primary)" }}>
                     {post.title}
                   </h4>
                 </div>
               </Link>
             ))}
           </div>
-          <div style={{ marginTop: "24px" }}>
-            <Link href="/explore" style={{ fontSize: "13px", color: "#2979FF", fontWeight: 500 }}>Browse all topics →</Link>
+          <div className="mt-5">
+            <Link href="/explore" className="text-xs font-medium" style={{ color: "#2979FF" }}>Browse all topics →</Link>
           </div>
           <WhoToFollow currentUserId={userId} />
         </div>
@@ -479,9 +438,7 @@ function WhoToFollow({ currentUserId }: { currentUserId: string | null }) {
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadWriters();
-  }, [currentUserId]);
+  useEffect(() => { loadWriters(); }, [currentUserId]);
 
   const loadWriters = async () => {
     if (!currentUserId) { setLoading(false); return; }
@@ -516,24 +473,22 @@ function WhoToFollow({ currentUserId }: { currentUserId: string | null }) {
   if (loading || writers.length === 0) return null;
 
   return (
-    <div style={{ marginTop: "32px", paddingTop: "32px", borderTop: "1px solid var(--border)" }}>
-      <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "20px" }}>
+    <div className="mt-8 pt-8" style={{ borderTop: "1px solid var(--border)" }}>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: "var(--text-faint)" }}>
         Who to follow
       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div className="flex flex-col gap-4">
         {writers.map((writer) => (
-          <div key={writer.id} style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-            <Link href={`/${writer.username}`} style={{ flexShrink: 0 }}>
-              <Avatar url={writer.avatar_url} name={writer.full_name} size={32} />
+          <div key={writer.id} className="flex items-start gap-2.5">
+            <Link href={`/${writer.username}`} className="shrink-0">
+              <Avatar url={writer.avatar_url} name={writer.full_name} size={30} />
             </Link>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Link href={`/${writer.username}`} className="hover:underline" style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block", lineHeight: 1.3 }}>
+            <div className="flex-1 min-w-0">
+              <Link href={`/${writer.username}`} className="text-xs font-semibold hover:underline block leading-snug" style={{ color: "var(--text-primary)" }}>
                 {writer.full_name}
               </Link>
               {writer.bio && (
-                <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                  {writer.bio}
-                </p>
+                <p className="text-xs mt-0.5 line-clamp-1" style={{ color: "var(--text-tertiary)" }}>{writer.bio}</p>
               )}
               <button
                 onClick={() => handleFollow(writer.id)}

@@ -61,7 +61,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
     <>
       <TopBar />
       <Sidebar />
-      <main style={{ marginLeft: "192px", paddingTop: "56px" }}>
+      <main className="lg:ml-48" style={{ paddingTop: "56px" }}>
         {children}
       </main>
     </>
