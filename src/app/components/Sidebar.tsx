@@ -36,6 +36,7 @@ export default function Sidebar() {
   const [username, setUsername] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingAdminCount, setPendingAdminCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
@@ -51,6 +52,16 @@ export default function Sidebar() {
     setUnreadMessages(count || 0);
   }, []);
 
+  const fetchPendingAdminCount = useCallback(async () => {
+    const [reports, pubRequests] = await Promise.all([
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("publisher_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    ]);
+    const total = (reports.count || 0) + (pubRequests.count || 0);
+    console.log("Admin badge count:", total, "reports:", reports.count, "pubRequests:", pubRequests.count, "errors:", reports.error, pubRequests.error);
+    setPendingAdminCount(total);
+  }, []);
+
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
@@ -59,12 +70,23 @@ export default function Sidebar() {
       setUserId(user.id);
 
       supabase.from("profiles").select("username").eq("id", user.id).single()
-        .then(({ data }) => setUsername(data?.username || null));
+        .then(async ({ data }) => {
+          const uname = data?.username || null;
+          setUsername(uname);
+          if (uname === "jharrower") {
+            const [reports, pubRequests] = await Promise.all([
+              supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+              supabase.from("publisher_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+            ]);
+            const total = (reports.count || 0) + (pubRequests.count || 0);
+            console.log("Admin badge:", total);
+            setPendingAdminCount(total);
+          }
+        });
 
       fetchUnreadMessages(user.id);
       loadFollowing(user.id);
 
-      // Realtime subscription for messages
       channel = supabase
         .channel("sidebar-messages")
         .on("postgres_changes", {
@@ -72,16 +94,33 @@ export default function Sidebar() {
           schema: "public",
           table: "messages",
           filter: `recipient_id=eq.${user.id}`,
-        }, (payload) => {
-          console.log("Sidebar INSERT event received", payload);
-          fetchUnreadMessages(user.id);
-        })
+        }, () => fetchUnreadMessages(user.id))
         .on("postgres_changes", {
           event: "UPDATE",
           schema: "public",
           table: "messages",
           filter: `recipient_id=eq.${user.id}`,
         }, () => fetchUnreadMessages(user.id))
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "reports",
+        }, () => fetchPendingAdminCount())
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "reports",
+        }, () => fetchPendingAdminCount())
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "publisher_requests",
+        }, () => fetchPendingAdminCount())
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "publisher_requests",
+        }, () => fetchPendingAdminCount())
         .subscribe();
     });
 
@@ -129,7 +168,7 @@ export default function Sidebar() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const isDashboardActive = pathname.startsWith("/dashboard");
+  const isDashboardActive = pathname.startsWith("/dashboard") && !pathname.startsWith("/dashboard/admin");
   const isCreateActive = pathname === "/dashboard/new";
 
   const getSubActive = (tab: string) =>
@@ -236,7 +275,7 @@ export default function Sidebar() {
       {username === "jharrower" && (
         <Link
           href="/dashboard/admin"
-          onClick={onClose}
+          onClick={() => { onClose?.(); }}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors group"
           style={{
             color: isActive("/dashboard/admin") ? "#2979FF" : "var(--text-secondary)",
@@ -248,6 +287,14 @@ export default function Sidebar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
           <span className="group-hover:text-blue-500 transition-colors">Admin</span>
+          {pendingAdminCount > 0 && (
+            <span
+              className="ml-auto text-xs rounded-full px-1.5 py-0.5 text-white font-semibold"
+              style={{ backgroundColor: "#2979FF", fontSize: "10px" }}
+            >
+              {pendingAdminCount}
+            </span>
+          )}
         </Link>
       )}
 

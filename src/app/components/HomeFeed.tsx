@@ -53,7 +53,7 @@ const Avatar = ({ url, name, size = 22 }: { url: string | null | undefined; name
 );
 
 export default function HomeFeed() {
-  const [tab, setTab] = useState<"for-you" | "following" | "tailored">("for-you");
+  const [tab, setTab] = useState<"for-you" | "following" | "tailored" | "publications">("for-you");
   const [posts, setPosts] = useState<Post[]>([]);
   const [counts, setCounts] = useState<PostCounts>({});
   const [trending, setTrending] = useState<Post[]>([]);
@@ -61,6 +61,8 @@ export default function HomeFeed() {
   const [interests, setInterests] = useState<string[]>([]);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pubArticles, setPubArticles] = useState<any[]>([]);
+  const [pubLoading, setPubLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -171,9 +173,64 @@ export default function HomeFeed() {
     if (data) setTrending(data as any);
   };
 
-  const handleTabChange = (t: "for-you" | "following" | "tailored") => {
+  const loadPublications = async (uid: string) => {
+    setPubLoading(true);
+    setPubArticles([]);
+
+    const { data: subs } = await supabase
+      .from("publisher_subscriptions")
+      .select("publisher_id, publishers(id, name, logo_url, rss_url)")
+      .eq("user_id", uid);
+
+    if (!subs || subs.length === 0) {
+      setPubLoading(false);
+      return;
+    }
+
+    const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const EDGE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/fetch-rss`;
+
+    const results = await Promise.allSettled(
+      subs.map(async (sub: any) => {
+        const publisher = sub.publishers;
+        if (!publisher?.rss_url) return [];
+        try {
+          const res = await fetch(EDGE_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${ANON_KEY}`,
+            },
+            body: JSON.stringify({ url: publisher.rss_url }),
+          });
+          const json = await res.json();
+          return (json.articles || []).map((a: any) => ({
+            ...a,
+            publisher_name: publisher.name,
+            publisher_logo: publisher.logo_url,
+          }));
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    const all: any[] = [];
+    results.forEach((r) => {
+      if (r.status === "fulfilled") all.push(...r.value);
+    });
+    all.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+    setPubArticles(all);
+    setPubLoading(false);
+  };
+
+  const handleTabChange = (t: "for-you" | "following" | "tailored" | "publications") => {
     setTab(t);
-    if (userId) loadFeed(userId, t, interests, blockedIds);
+    if (t === "publications") {
+      if (userId) loadPublications(userId);
+    } else if (userId) {
+      loadFeed(userId, t, interests, blockedIds);
+    }
   };
 
   const formatDate = (d: string) =>
@@ -186,6 +243,7 @@ export default function HomeFeed() {
     { key: "for-you", label: "For You" },
     { key: "following", label: "Following" },
     { key: "tailored", label: "Tailored" },
+    { key: "publications", label: "Publications" },
   ] as const;
 
   const PostMeta = ({ postId, tags }: { postId: string; tags: string[] }) => {
@@ -268,7 +326,7 @@ export default function HomeFeed() {
   return (
     <div className="flex gap-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* Main feed — full width on mobile */}
+      {/* Main feed */}
       <div className="flex-1 min-w-0">
 
         {/* Tabs */}
@@ -277,12 +335,16 @@ export default function HomeFeed() {
             <button
               key={t.key}
               onClick={() => handleTabChange(t.key)}
-              className="text-sm pb-3 mr-7 transition-colors"
+              className="text-sm pb-3 mr-5 transition-colors shrink-0"
               style={{
                 fontWeight: tab === t.key ? 600 : 400,
                 border: "none",
-                borderBottom: tab === t.key ? "2px solid var(--text-primary)" : "2px solid transparent",
-                color: tab === t.key ? "var(--text-primary)" : "var(--text-tertiary)",
+                borderBottom: t.key === "publications"
+                  ? tab === t.key ? "2px solid #2979FF" : "2px solid transparent"
+                  : tab === t.key ? "2px solid var(--text-primary)" : "2px solid transparent",
+                color: t.key === "publications"
+                  ? "#2979FF"
+                  : tab === t.key ? "var(--text-primary)" : "var(--text-tertiary)",
                 background: "none",
                 cursor: "pointer",
               }}
@@ -292,111 +354,198 @@ export default function HomeFeed() {
           ))}
         </div>
 
-        {loading ? (
-          <div className="flex flex-col gap-8">
-            <div className="rounded-2xl h-64 sm:h-80 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="flex gap-4 pt-7" style={{ borderTop: "1px solid var(--border)" }}>
-                <div className="flex-1">
-                  <div className="h-3 w-28 rounded-md mb-3 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
-                  <div className="h-5 w-4/5 rounded-md mb-2 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
-                  <div className="h-3 w-3/5 rounded-md animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+        {/* Publications tab */}
+        {tab === "publications" && (
+          pubLoading ? (
+            <div className="flex flex-col gap-8">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex gap-4 pt-7" style={{ borderTop: "1px solid var(--border)" }}>
+                  <div className="flex-1">
+                    <div className="h-3 w-28 rounded-md mb-3 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                    <div className="h-5 w-4/5 rounded-md mb-2 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                    <div className="h-3 w-3/5 rounded-md animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                  </div>
+                  <div className="rounded-xl animate-pulse shrink-0 hidden sm:block" style={{ width: 120, height: 80, background: "var(--bg-tertiary)" }} />
                 </div>
-                <div className="rounded-xl animate-pulse shrink-0 hidden sm:block" style={{ width: 120, height: 80, background: "var(--bg-tertiary)" }} />
-              </div>
-            ))}
-          </div>
-        ) : posts.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-sm mb-3" style={{ color: "var(--text-tertiary)" }}>
-              {tab === "following" ? "Subscribe to writers to see their posts here."
-                : tab === "tailored" ? "Not enough activity yet. Like and save some articles first."
-                : interests.length === 0 ? "Set your interests in Settings to personalise this feed."
-                : "No posts matching your interests yet."}
-            </p>
-            {tab === "following" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Discover writers →</Link>}
-            {tab === "for-you" && interests.length === 0 && <Link href="/settings" className="text-sm font-medium" style={{ color: "#2979FF" }}>Update your interests →</Link>}
-            {tab === "tailored" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Explore articles →</Link>}
-          </div>
-        ) : (
-          <>
-            {/* Hero */}
-            {hero && (
-              <Link href={`/p/${hero.slug}`} className="block mb-10 group">
-                {hero.cover_image ? (
-                  <div className="relative rounded-2xl overflow-hidden" style={{ height: "280px" }}>
-                    <img src={hero.cover_image} alt={hero.title} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }} />
-                    <div className="absolute bottom-0 left-0 right-0 p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
-                        <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{hero.profiles?.full_name}</span>
-                        <span style={{ color: "rgba(255,255,255,0.35)" }}>·</span>
-                        <span className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{formatDate(hero.published_at)}</span>
-                      </div>
-                      <h2 className="text-xl sm:text-2xl font-bold leading-snug mb-1" style={{ color: "white", letterSpacing: "-0.02em" }}>
-                        {hero.title}
-                      </h2>
-                      {hero.subtitle && (
-                        <p className="text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>{hero.subtitle}</p>
-                      )}
-                      <HeroMeta post={hero} />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl p-8" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                    <div className="flex items-center gap-2 mb-4">
-                      <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
-                      <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>{hero.profiles?.full_name}</span>
-                      <span style={{ color: "var(--text-faint)" }}>·</span>
-                      <span className="text-sm" style={{ color: "var(--text-faint)" }}>{formatDate(hero.published_at)}</span>
-                    </div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{hero.title}</h2>
-                    {hero.subtitle && <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{hero.subtitle}</p>}
-                    <PostMeta postId={hero.id} tags={hero.tags} />
-                  </div>
-                )}
-              </Link>
-            )}
-
-            {/* Article list */}
-            <div>
-              {rest.map((post) => (
-                <article key={post.id} className="flex gap-4 py-6" style={{ borderTop: "1px solid var(--border)" }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={18} />
-                      <Link href={`/${post.profiles?.username}`} className="text-xs font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
-                        {post.profiles?.full_name}
-                      </Link>
-                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>·</span>
-                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
-                    </div>
-                    <Link href={`/p/${post.slug}`}>
-                      <h2 className="font-bold mb-1 hover:underline leading-snug" style={{ fontSize: "16px", color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
-                        {post.title}
-                      </h2>
-                      {post.subtitle && (
-                        <p className="text-sm leading-relaxed line-clamp-2" style={{ color: "var(--text-secondary)" }}>
-                          {post.subtitle}
-                        </p>
-                      )}
-                    </Link>
-                    <PostMeta postId={post.id} tags={post.tags} />
-                  </div>
-                  {post.cover_image && (
-                    <Link href={`/p/${post.slug}`} className="shrink-0 hidden sm:block">
-                      <img src={post.cover_image} alt={post.title} className="rounded-xl object-cover" style={{ width: 120, height: 80 }} />
-                    </Link>
-                  )}
-                </article>
               ))}
             </div>
+          ) : pubArticles.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-4xl mb-4">📰</div>
+              <p className="font-semibold mb-2" style={{ color: "var(--text-primary)" }}>No publications followed yet</p>
+              <p className="text-sm mb-6" style={{ color: "var(--text-tertiary)" }}>
+                Follow publications to see their latest articles here.
+              </p>
+              <a href="/settings/publishers"
+                className="text-sm font-semibold px-6 py-2.5 rounded-xl inline-block hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: "#2979FF", color: "#ffffff" }}>
+                Manage publications
+              </a>
+            </div>
+          ) : (
+            <div>
+              {pubArticles.map((article, i) => (
+                
+                  <a key={i}
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex gap-4 py-6 group"
+                  style={{ borderTop: "1px solid var(--border)" }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      {article.publisher_logo ? (
+                        <img src={article.publisher_logo} alt={article.publisher_name}
+                          className="w-5 h-5 rounded object-cover shrink-0" />
+                      ) : (
+                        <div className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-white shrink-0"
+                          style={{ backgroundColor: "#2979FF" }}>
+                          {article.publisher_name?.[0]}
+                        </div>
+                      )}
+                      <span className="text-xs font-medium" style={{ color: "#2979FF" }}>{article.publisher_name}</span>
+                      {article.published_at && (
+                        <>
+                          <span style={{ color: "var(--text-faint)" }}>·</span>
+                          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                            {new Date(article.published_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <h2 className="font-bold mb-1 leading-snug group-hover:underline"
+                      style={{ fontSize: "16px", color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                      {article.title}
+                    </h2>
+                    {article.description && (
+                      <p className="text-sm leading-relaxed line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+                        {article.description}
+                      </p>
+                    )}
+                    <p className="text-xs mt-2 font-medium" style={{ color: "#2979FF" }}>
+                      Read on {article.publisher_name} →
+                    </p>
+                  </div>
+                  {article.cover_image && (
+                    <div className="shrink-0 hidden sm:block">
+                      <img src={article.cover_image} alt={article.title}
+                        className="rounded-xl object-cover" style={{ width: 120, height: 80 }} />
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* Other tabs */}
+        {tab !== "publications" && (
+          <>
+            {loading ? (
+              <div className="flex flex-col gap-8">
+                <div className="rounded-2xl h-64 sm:h-80 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex gap-4 pt-7" style={{ borderTop: "1px solid var(--border)" }}>
+                    <div className="flex-1">
+                      <div className="h-3 w-28 rounded-md mb-3 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                      <div className="h-5 w-4/5 rounded-md mb-2 animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                      <div className="h-3 w-3/5 rounded-md animate-pulse" style={{ background: "var(--bg-tertiary)" }} />
+                    </div>
+                    <div className="rounded-xl animate-pulse shrink-0 hidden sm:block" style={{ width: 120, height: 80, background: "var(--bg-tertiary)" }} />
+                  </div>
+                ))}
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-20">
+                <p className="text-sm mb-3" style={{ color: "var(--text-tertiary)" }}>
+                  {tab === "following" ? "Subscribe to writers to see their posts here."
+                    : tab === "tailored" ? "Not enough activity yet. Like and save some articles first."
+                    : interests.length === 0 ? "Set your interests in Settings to personalise this feed."
+                    : "No posts matching your interests yet."}
+                </p>
+                {tab === "following" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Discover writers →</Link>}
+                {tab === "for-you" && interests.length === 0 && <Link href="/settings" className="text-sm font-medium" style={{ color: "#2979FF" }}>Update your interests →</Link>}
+                {tab === "tailored" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Explore articles →</Link>}
+              </div>
+            ) : (
+              <>
+                {hero && (
+                  <Link href={`/p/${hero.slug}`} className="block mb-10 group">
+                    {hero.cover_image ? (
+                      <div className="relative rounded-2xl overflow-hidden" style={{ height: "280px" }}>
+                        <img src={hero.cover_image} alt={hero.title} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+                        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }} />
+                        <div className="absolute bottom-0 left-0 right-0 p-6">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
+                            <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{hero.profiles?.full_name}</span>
+                            <span style={{ color: "rgba(255,255,255,0.35)" }}>·</span>
+                            <span className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{formatDate(hero.published_at)}</span>
+                          </div>
+                          <h2 className="text-xl sm:text-2xl font-bold leading-snug mb-1" style={{ color: "white", letterSpacing: "-0.02em" }}>
+                            {hero.title}
+                          </h2>
+                          {hero.subtitle && (
+                            <p className="text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>{hero.subtitle}</p>
+                          )}
+                          <HeroMeta post={hero} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl p-8" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
+                        <div className="flex items-center gap-2 mb-4">
+                          <Avatar url={hero.profiles?.avatar_url} name={hero.profiles?.full_name} size={20} />
+                          <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>{hero.profiles?.full_name}</span>
+                          <span style={{ color: "var(--text-faint)" }}>·</span>
+                          <span className="text-sm" style={{ color: "var(--text-faint)" }}>{formatDate(hero.published_at)}</span>
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{hero.title}</h2>
+                        {hero.subtitle && <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{hero.subtitle}</p>}
+                        <PostMeta postId={hero.id} tags={hero.tags} />
+                      </div>
+                    )}
+                  </Link>
+                )}
+                <div>
+                  {rest.map((post) => (
+                    <article key={post.id} className="flex gap-4 py-6" style={{ borderTop: "1px solid var(--border)" }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Avatar url={post.profiles?.avatar_url} name={post.profiles?.full_name} size={18} />
+                          <Link href={`/${post.profiles?.username}`} className="text-xs font-medium hover:underline" style={{ color: "var(--text-primary)" }}>
+                            {post.profiles?.full_name}
+                          </Link>
+                          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>·</span>
+                          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
+                        </div>
+                        <Link href={`/p/${post.slug}`}>
+                          <h2 className="font-bold mb-1 hover:underline leading-snug" style={{ fontSize: "16px", color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                            {post.title}
+                          </h2>
+                          {post.subtitle && (
+                            <p className="text-sm leading-relaxed line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+                              {post.subtitle}
+                            </p>
+                          )}
+                        </Link>
+                        <PostMeta postId={post.id} tags={post.tags} />
+                      </div>
+                      {post.cover_image && (
+                        <Link href={`/p/${post.slug}`} className="shrink-0 hidden sm:block">
+                          <img src={post.cover_image} alt={post.title} className="rounded-xl object-cover" style={{ width: 120, height: 80 }} />
+                        </Link>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
 
-      {/* Right sidebar — desktop only */}
+      {/* Right sidebar */}
       <div className="hidden lg:flex flex-col w-52 shrink-0">
         <div className="sticky bottom-8">
           <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: "var(--text-faint)" }}>

@@ -285,6 +285,16 @@ export default function SettingsPage() {
             </button>
           </div>
 
+          <div className="flex items-center justify-between p-4 rounded-xl" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
+            <div>
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Publications</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>Follow publications to see their articles in your feed</p>
+            </div>
+            <Link href="/settings/publishers" className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors hover:opacity-80" style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}>
+              Manage
+            </Link>
+          </div>
+
           <div className="p-4 rounded-xl" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
             <div className="flex items-center justify-between mb-3">
               <div>
