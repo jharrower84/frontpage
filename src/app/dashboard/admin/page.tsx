@@ -49,7 +49,7 @@ interface FeaturedPost {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<"stats" | "users" | "reports" | "featured" | "publishers">("stats");
+  const [tab, setTab] = useState<"stats" | "users" | "reports" | "featured" | "publishers" | "applications">("stats");
   const [authorised, setAuthorised] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -73,6 +73,15 @@ export default function AdminPage() {
   const [newPubCategory, setNewPubCategory] = useState("");
   const [newPubLogo, setNewPubLogo] = useState("");
 
+  // Applications state
+  const [applications, setApplications] = useState<any[]>([]);
+  const [pendingApplications, setPendingApplications] = useState<any[]>([]);
+  const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showRejectForm, setShowRejectForm] = useState<string | null>(null);
+  const [processingApp, setProcessingApp] = useState<string | null>(null);
+  const [appFilter, setAppFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push("/signin"); return; }
@@ -87,6 +96,7 @@ export default function AdminPage() {
           loadFeatured();
           loadPublishers();
           loadPubRequests();
+          loadApplications();
         });
     });
   }, []);
@@ -114,7 +124,7 @@ export default function AdminPage() {
 
   const loadUsers = async () => {
     const { data } = await supabase.from("profiles")
-      .select("id, full_name, username, avatar_url, bio, created_at")
+      .select("id, full_name, username, avatar_url, bio, created_at, approved_creator")
       .order("created_at", { ascending: false }).limit(100);
     if (!data) return;
     const enriched = await Promise.all(
@@ -164,6 +174,20 @@ export default function AdminPage() {
     setPubRequests(data || []);
   };
 
+  const loadApplications = async () => {
+    const { data } = await supabase.from("creator_applications").select("*")
+      .order("created_at", { ascending: false });
+    if (!data) return;
+    const userIds = [...new Set(data.map((a) => a.user_id))];
+    const { data: profiles } = await supabase.from("profiles")
+      .select("id, username, avatar_url").in("id", userIds);
+    const profileMap: Record<string, any> = {};
+    profiles?.forEach((p) => { profileMap[p.id] = p; });
+    const enriched = data.map((a) => ({ ...a, profile: profileMap[a.user_id] || null }));
+    setApplications(enriched);
+    setPendingApplications(enriched.filter((a) => a.status === "pending"));
+  };
+
   const searchFeatured = async (q: string) => {
     setFeaturedSearch(q);
     if (!q.trim()) { setFeaturedResults([]); return; }
@@ -204,6 +228,12 @@ export default function AdminPage() {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
   };
 
+const revokeCreator = async (userId: string) => {
+    if (!confirm("Revoke this user's creator access? They will no longer be able to publish but their account and existing posts will remain.")) return;
+    await supabase.from("profiles").update({ approved_creator: false }).eq("id", userId);
+    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, approved_creator: false } as any : u));
+  };
+
   const togglePublisherActive = async (id: string, current: boolean) => {
     await supabase.from("publishers").update({ active: !current }).eq("id", id);
     setPublishers((prev) => prev.map((p) => p.id === id ? { ...p, active: !current } : p));
@@ -213,13 +243,9 @@ export default function AdminPage() {
     if (!newPubName.trim() || !newPubRss.trim()) return;
     setAddingPub(true);
     const { error } = await supabase.from("publishers").insert({
-      name: newPubName.trim(),
-      description: newPubDescription.trim() || null,
-      website: newPubWebsite.trim() || null,
-      rss_url: newPubRss.trim(),
-      category: newPubCategory.trim() || null,
-      logo_url: newPubLogo.trim() || null,
-      active: true,
+      name: newPubName.trim(), description: newPubDescription.trim() || null,
+      website: newPubWebsite.trim() || null, rss_url: newPubRss.trim(),
+      category: newPubCategory.trim() || null, logo_url: newPubLogo.trim() || null, active: true,
     });
     setAddingPub(false);
     if (!error) {
@@ -244,6 +270,38 @@ export default function AdminPage() {
     loadPubRequests();
   };
 
+  const handleApprove = async (applicationId: string) => {
+    if (!confirm("Approve this application?")) return;
+    setProcessingApp(applicationId);
+    const { data: { user } } = await supabase.auth.getUser();
+    await fetch("/api/creator-application", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId, action: "approve", adminId: user?.id }),
+    });
+    setProcessingApp(null);
+    setSelectedApplication(null);
+    loadApplications();
+    window.dispatchEvent(new CustomEvent("admin-action-completed"));
+  };
+
+  const handleReject = async (applicationId: string) => {
+    if (!rejectionReason.trim()) return;
+    setProcessingApp(applicationId);
+    const { data: { user } } = await supabase.auth.getUser();
+    await fetch("/api/creator-application", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId, action: "reject", rejectionReason, adminId: user?.id }),
+    });
+    setProcessingApp(null);
+    setShowRejectForm(null);
+    setRejectionReason("");
+    setSelectedApplication(null);
+    loadApplications();
+    window.dispatchEvent(new CustomEvent("admin-action-completed"));
+  };
+
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -252,6 +310,10 @@ export default function AdminPage() {
     const q = userSearch.toLowerCase();
     return u.full_name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q);
   });
+
+  const filteredApplications = applications.filter((a) =>
+    appFilter === "all" ? true : a.status === appFilter
+  );
 
   const pendingReports = reports.filter((r) => r.status === "pending");
   const pendingPubRequests = pubRequests.filter((r) => r.status === "pending");
@@ -270,6 +332,7 @@ export default function AdminPage() {
     { key: "reports", label: `Reports${pendingReports.length > 0 ? ` (${pendingReports.length})` : ""}` },
     { key: "featured", label: "Featured" },
     { key: "publishers", label: `Publishers${pendingPubRequests.length > 0 ? ` (${pendingPubRequests.length})` : ""}` },
+    { key: "applications", label: `Applications${pendingApplications.length > 0 ? ` (${pendingApplications.length})` : ""}` },
   ] as const;
 
   return (
@@ -289,8 +352,7 @@ export default function AdminPage() {
           <button key={t.key} onClick={() => setTab(t.key)}
             className="text-sm pb-3 mr-6 shrink-0 transition-colors"
             style={{
-              fontWeight: tab === t.key ? 600 : 400,
-              border: "none",
+              fontWeight: tab === t.key ? 600 : 400, border: "none",
               borderBottom: tab === t.key ? "2px solid var(--text-primary)" : "2px solid transparent",
               color: tab === t.key ? "var(--text-primary)" : "var(--text-tertiary)",
               background: "none", cursor: "pointer",
@@ -355,10 +417,18 @@ export default function AdminPage() {
                     View
                   </Link>
                   {user.username !== "jharrower" && (
-                    <button onClick={() => suspendUser(user.id, user.username)}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">
-                      Remove
-                    </button>
+                    <>
+                      {(user as any).approved_creator && (
+                        <button onClick={() => revokeCreator(user.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-orange-200 text-orange-400 hover:bg-orange-50 transition-colors">
+                          Revoke
+                        </button>
+                      )}
+                      <button onClick={() => suspendUser(user.id, user.username)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">
+                        Remove
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -493,7 +563,6 @@ export default function AdminPage() {
       {/* PUBLISHERS */}
       {tab === "publishers" && (
         <div>
-          {/* Pending requests */}
           {pendingPubRequests.length > 0 && (
             <div className="mb-10">
               <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--text-tertiary)" }}>
@@ -501,8 +570,7 @@ export default function AdminPage() {
               </h3>
               <div className="space-y-3">
                 {pendingPubRequests.map((req) => (
-                  <div key={req.id} className="border rounded-2xl p-4"
-                    style={{ borderColor: "#2979FF", background: "var(--bg)" }}>
+                  <div key={req.id} className="border rounded-2xl p-4" style={{ borderColor: "#2979FF", background: "var(--bg)" }}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{req.publisher_name}</p>
@@ -512,9 +580,7 @@ export default function AdminPage() {
                             {req.publisher_website}
                           </a>
                         )}
-                        {req.notes && (
-                          <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>{req.notes}</p>
-                        )}
+                        {req.notes && <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>{req.notes}</p>}
                         <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
                           from @{req.profiles?.username} · {formatDate(req.created_at)}
                         </p>
@@ -538,7 +604,6 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* Add publisher */}
           <div className="mb-8">
             <button onClick={() => setShowAddPub((v) => !v)}
               className="flex items-center gap-2 text-sm font-semibold mb-4 hover:opacity-70 transition-opacity"
@@ -578,7 +643,6 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Publishers list */}
           <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--text-tertiary)" }}>
             All publishers ({publishers.length})
           </h3>
@@ -614,7 +678,6 @@ export default function AdminPage() {
             ))}
           </div>
 
-          {/* Past requests */}
           {pubRequests.filter((r) => r.status !== "pending").length > 0 && (
             <div className="mt-10">
               <h3 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--text-tertiary)" }}>
@@ -639,6 +702,160 @@ export default function AdminPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* APPLICATIONS */}
+      {tab === "applications" && (
+        <div>
+          {selectedApplication ? (
+            <div>
+              <button onClick={() => { setSelectedApplication(null); setShowRejectForm(null); setRejectionReason(""); }}
+                className="flex items-center gap-2 text-sm mb-6 hover:opacity-70 transition-opacity"
+                style={{ color: "var(--text-secondary)" }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m7-7l-7 7 7 7" />
+                </svg>
+                Back to applications
+              </button>
+
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{selectedApplication.full_name}</h2>
+                  <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
+                    {selectedApplication.publication_name} · @{selectedApplication.profile?.username}
+                  </p>
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full font-medium"
+                  style={{
+                    background: selectedApplication.status === "pending" ? "#eef3ff" : selectedApplication.status === "approved" ? "#f0fdf4" : "#fff5f5",
+                    color: selectedApplication.status === "pending" ? "#2979FF" : selectedApplication.status === "approved" ? "#22c55e" : "#e05555",
+                  }}>
+                  {selectedApplication.status}
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {[
+                  { label: "Bio", value: selectedApplication.bio },
+                  { label: "Pitch", value: selectedApplication.pitch },
+                  { label: "Niche", value: selectedApplication.niche?.join(", ") },
+                  { label: "Instagram", value: selectedApplication.instagram ? `@${selectedApplication.instagram}` : null },
+                  { label: "TikTok", value: selectedApplication.tiktok ? `@${selectedApplication.tiktok}` : null },
+                  { label: "LinkedIn", value: selectedApplication.linkedin },
+                  { label: "Website", value: selectedApplication.website },
+                  { label: "Writing samples", value: selectedApplication.writing_samples },
+                  { label: "Rejection feedback", value: selectedApplication.rejection_reason },
+                ].filter((f) => f.value).map((field) => (
+                  <div key={field.label} className="rounded-xl p-4" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--text-faint)" }}>{field.label}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "var(--text-primary)" }}>{field.value}</p>
+                  </div>
+                ))}
+                <p className="text-xs" style={{ color: "var(--text-faint)" }}>Applied {formatDate(selectedApplication.created_at)}</p>
+              </div>
+
+              {selectedApplication.status === "pending" && (
+                <div className="mt-8 space-y-3">
+                  {showRejectForm === selectedApplication.id ? (
+                    <div className="space-y-3">
+                      <textarea value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)}
+                        placeholder="Provide feedback for the applicant..."
+                        rows={3}
+                        className="w-full px-4 py-3 text-sm rounded-xl focus:outline-none resize-none"
+                        style={{ border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text-primary)" }} />
+                      <div className="flex gap-2">
+                        <button onClick={() => { setShowRejectForm(null); setRejectionReason(""); }}
+                          className="text-sm px-4 py-2 rounded-lg border transition-colors"
+                          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+                          Cancel
+                        </button>
+                        <button onClick={() => handleReject(selectedApplication.id)}
+                          disabled={!rejectionReason.trim() || !!processingApp}
+                          className="text-sm px-4 py-2 rounded-lg text-white disabled:opacity-40"
+                          style={{ backgroundColor: "#e05555" }}>
+                          {processingApp === selectedApplication.id ? "Sending..." : "Send rejection"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button onClick={() => setShowRejectForm(selectedApplication.id)}
+                        className="text-sm px-5 py-2.5 rounded-xl border transition-colors"
+                        style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+                        Reject
+                      </button>
+                      <button onClick={() => handleApprove(selectedApplication.id)}
+                        disabled={!!processingApp}
+                        className="text-sm px-5 py-2.5 rounded-xl text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
+                        style={{ backgroundColor: "#2979FF" }}>
+                        {processingApp === selectedApplication.id ? "Approving..." : "Approve"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2 mb-6 flex-wrap">
+                {(["all", "pending", "approved", "rejected"] as const).map((f) => (
+                  <button key={f} onClick={() => setAppFilter(f)}
+                    className="text-xs px-3 py-1.5 rounded-full capitalize transition-colors"
+                    style={{
+                      background: appFilter === f ? "#2979FF" : "var(--bg-secondary)",
+                      color: appFilter === f ? "white" : "var(--text-secondary)",
+                      border: appFilter === f ? "1px solid #2979FF" : "1px solid var(--border)",
+                    }}>
+                    {f} ({f === "all" ? applications.length : applications.filter((a) => a.status === f).length})
+                  </button>
+                ))}
+              </div>
+
+              {filteredApplications.length === 0 ? (
+                <div className="text-center py-16">
+                  <p className="font-semibold mb-1" style={{ color: "var(--text-primary)" }}>No applications yet</p>
+                  <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Applications will appear here when users apply to become creators.</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  {filteredApplications.map((app) => (
+                    <button key={app.id} onClick={() => setSelectedApplication(app)}
+                      className="w-full py-4 flex items-center justify-between gap-4 text-left hover:opacity-70 transition-opacity">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {app.profile?.avatar_url ? (
+                          <img src={app.profile.avatar_url} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                            style={{ background: "var(--bg-tertiary)", color: "var(--text-tertiary)" }}>
+                            {app.full_name?.[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{app.full_name}</p>
+                          <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                            {app.publication_name} · {formatDate(app.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs px-2.5 py-1 rounded-full font-medium"
+                          style={{
+                            background: app.status === "pending" ? "#eef3ff" : app.status === "approved" ? "#f0fdf4" : "#fff5f5",
+                            color: app.status === "pending" ? "#2979FF" : app.status === "approved" ? "#22c55e" : "#e05555",
+                          }}>
+                          {app.status}
+                        </span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4" style={{ color: "var(--text-faint)" }}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

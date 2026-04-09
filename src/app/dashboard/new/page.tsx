@@ -13,6 +13,7 @@ const FASHION_TAGS = [
 
 export default function NewPostPage() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [content, setContent] = useState("");
@@ -26,6 +27,18 @@ export default function NewPostPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { router.push("/signin"); return; }
+      const { data } = await supabase.from("profiles").select("approved_creator, username").eq("id", user.id).single();
+      if (!data?.approved_creator && data?.username !== "jharrower") {
+        router.push("/apply");
+        return;
+      }
+      setChecking(false);
+    });
+  }, []);
 
   const saveDraft = useCallback(async (silent = false) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -42,10 +55,8 @@ export default function NewPostPage() {
         content,
         tags,
         cover_image: coverImage,
-        updated_at: new Date().toISOString(),
       }).eq("id", draftId);
     } else {
-      // Check if a draft with this title already exists to avoid duplicates
       const { data: existing } = await supabase
         .from("posts")
         .select("id")
@@ -61,7 +72,6 @@ export default function NewPostPage() {
           content,
           tags,
           cover_image: coverImage,
-          updated_at: new Date().toISOString(),
         }).eq("id", existing.id);
       } else {
         const { data } = await supabase.from("posts").insert({
@@ -139,13 +149,16 @@ export default function NewPostPage() {
     router.push("/dashboard");
   };
 
-  // Minimum datetime for schedule picker — now
   const minDateTime = new Date(Date.now() + 60000).toISOString().slice(0, 16);
+
+  if (checking) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
+    </div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-10">
-
-      {/* Top bar */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-lg font-semibold text-black">New post</h1>
         <div className="flex items-center gap-3">
@@ -172,7 +185,6 @@ export default function NewPostPage() {
         </div>
       </div>
 
-      {/* Schedule panel */}
       {showSchedule && (
         <div className="mb-6 p-4 border border-gray-200 rounded-xl bg-gray-50 flex items-center gap-4">
           <div className="flex-1">
@@ -198,7 +210,6 @@ export default function NewPostPage() {
         </div>
       )}
 
-      {/* Cover image */}
       <div
         onClick={() => document.getElementById("cover-upload")?.click()}
         className="relative w-full h-52 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-gray-300 transition-colors mb-8 overflow-hidden"
@@ -219,15 +230,12 @@ export default function NewPostPage() {
         <input id="cover-upload" type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
       </div>
 
-      {/* Title */}
       <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title"
         className="w-full text-4xl font-bold text-black placeholder-gray-200 border-none outline-none mb-3 bg-transparent" />
 
-      {/* Subtitle */}
       <input type="text" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Add a subtitle..."
         className="w-full text-xl text-gray-400 placeholder-gray-200 border-none outline-none mb-6 bg-transparent" />
 
-      {/* Tags */}
       <div className="mb-6">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-2">Tags</p>
         <div className="flex flex-wrap gap-2">

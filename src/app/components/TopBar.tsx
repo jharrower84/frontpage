@@ -9,6 +9,7 @@ interface Profile {
   username: string;
   avatar_url: string | null;
   full_name: string;
+  approved_creator: boolean;
 }
 
 export default function TopBar() {
@@ -32,7 +33,7 @@ export default function TopBar() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
 
-      supabase.from("profiles").select("username, avatar_url, full_name")
+      supabase.from("profiles").select("username, avatar_url, full_name, approved_creator")
         .eq("id", user.id).single()
         .then(({ data }) => setProfile(data));
 
@@ -60,7 +61,6 @@ export default function TopBar() {
         .subscribe();
     });
 
-    // Listen for notifications-read event from notifications page
     const handleRead = () => setUnread(0);
     window.addEventListener("notifications-read", handleRead);
 
@@ -94,6 +94,7 @@ export default function TopBar() {
   };
 
   const profileHref = profile?.username ? `/profile/${profile.username}` : "/profile";
+  const createHref = profile?.approved_creator ? "/dashboard/new" : "/apply";
 
   return (
     <>
@@ -159,18 +160,18 @@ export default function TopBar() {
           </button>
 
           <Link
-            href="/dashboard/new"
+            href={createHref}
             className="hidden sm:flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#2979FF", color: "white" }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
-            Create
+            {profile?.approved_creator ? "Create" : "Apply"}
           </Link>
 
           <Link
-            href="/dashboard/new"
+            href={createHref}
             className="sm:hidden p-2"
             style={{ color: "var(--text-secondary)" }}
           >

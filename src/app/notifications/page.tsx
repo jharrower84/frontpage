@@ -106,13 +106,19 @@ export default function NotificationsPage() {
     if (n.type === "like") return "liked your article";
     if (n.type === "comment") return "commented on your article";
     if (n.type === "subscribe") return "subscribed to you";
-    return "interacted with your content";
+    if (n.type === "creator_approved") return "Your creator application has been approved! You can now publish on FrontPage.";
+    if (n.type === "creator_rejected") return n.message || "Your creator application was not approved.";
+    if (n.type === "creator_application") return "submitted a creator application.";
+    return n.message || "interacted with your content";
   };
 
   const getIconBg = (type: string) => {
     if (type === "like") return { bg: "#fff0f0", emoji: "❤️" };
     if (type === "comment") return { bg: "#f0f4ff", emoji: "💬" };
     if (type === "subscribe") return { bg: "#f0fff4", emoji: "✅" };
+    if (type === "creator_approved") return { bg: "#f0fff4", emoji: "🎉" };
+    if (type === "creator_rejected") return { bg: "#fff5f5", emoji: "📋" };
+    if (type === "creator_application") return { bg: "#eef3ff", emoji: "✍️" };
     return { bg: "#f3f4f6", emoji: "🔔" };
   };
 
@@ -177,9 +183,13 @@ export default function NotificationsPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm leading-snug" style={{ color: "var(--text-primary)" }}>
-                              <Link href={`/${n.actor?.username}`} className="font-semibold hover:underline">
-                                {n.actor?.full_name}
-                              </Link>
+                              {n.actor?.username ? (
+                                <Link href={`/${n.actor.username}`} className="font-semibold hover:underline">
+                                  {n.actor.full_name}
+                                </Link>
+                              ) : (
+                                <span className="font-semibold">Someone</span>
+                              )}
                               {" "}{getNotificationText(n)}
                               {n.post && (
                                 <>

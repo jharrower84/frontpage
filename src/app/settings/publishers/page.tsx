@@ -84,7 +84,7 @@ export default function PublishersSettingsPage() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => router.push("/")}
+        <button onClick={() => router.push("/settings")}
           className="p-2 rounded-lg hover:opacity-70 transition-opacity"
           style={{ color: "var(--text-secondary)", background: "var(--bg-secondary)" }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">

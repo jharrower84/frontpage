@@ -35,6 +35,7 @@ export default function Sidebar() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [approvedCreator, setApprovedCreator] = useState<boolean>(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingAdminCount, setPendingAdminCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -53,12 +54,12 @@ export default function Sidebar() {
   }, []);
 
   const fetchPendingAdminCount = useCallback(async () => {
-    const [reports, pubRequests] = await Promise.all([
+    const [reports, pubRequests, applications] = await Promise.all([
       supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("publisher_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("creator_applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     ]);
-    const total = (reports.count || 0) + (pubRequests.count || 0);
-    console.log("Admin badge count:", total, "reports:", reports.count, "pubRequests:", pubRequests.count, "errors:", reports.error, pubRequests.error);
+    const total = (reports.count || 0) + (pubRequests.count || 0) + (applications.count || 0);
     setPendingAdminCount(total);
   }, []);
 
@@ -69,18 +70,13 @@ export default function Sidebar() {
       if (!user) return;
       setUserId(user.id);
 
-      supabase.from("profiles").select("username").eq("id", user.id).single()
+      supabase.from("profiles").select("username, approved_creator").eq("id", user.id).single()
         .then(async ({ data }) => {
           const uname = data?.username || null;
           setUsername(uname);
+          setApprovedCreator(data?.approved_creator ?? false);
           if (uname === "jharrower") {
-            const [reports, pubRequests] = await Promise.all([
-              supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
-              supabase.from("publisher_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
-            ]);
-            const total = (reports.count || 0) + (pubRequests.count || 0);
-            console.log("Admin badge:", total);
-            setPendingAdminCount(total);
+            fetchPendingAdminCount();
           }
         });
 
@@ -121,6 +117,16 @@ export default function Sidebar() {
           schema: "public",
           table: "publisher_requests",
         }, () => fetchPendingAdminCount())
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "creator_applications",
+        }, () => fetchPendingAdminCount())
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "creator_applications",
+        }, () => fetchPendingAdminCount())
         .subscribe();
     });
 
@@ -128,6 +134,13 @@ export default function Sidebar() {
       if (channel) supabase.removeChannel(channel);
     };
   }, []);
+
+  // Listen for admin actions completing in the admin panel
+  useEffect(() => {
+    const handleAdminAction = () => fetchPendingAdminCount();
+    window.addEventListener("admin-action-completed", handleAdminAction);
+    return () => window.removeEventListener("admin-action-completed", handleAdminAction);
+  }, [fetchPendingAdminCount]);
 
   const loadFollowing = async (uid: string) => {
     const { data: subs } = await supabase
@@ -187,7 +200,10 @@ export default function Sidebar() {
 
   const renderNav = (onClose?: () => void) => (
     <nav className="flex-1 px-3 py-2 space-y-px overflow-y-auto">
-      {NAV.map(({ href, label, icon }) => {
+      {NAV.filter(({ href }) => {
+        if (href === "/dashboard" && !approvedCreator && username !== "jharrower") return false;
+        return true;
+      }).map(({ href, label, icon }) => {
         const active = href === "/dashboard"
           ? isDashboardActive
           : href === "/" ? pathname === "/" : pathname.startsWith(href);
