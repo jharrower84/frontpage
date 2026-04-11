@@ -53,12 +53,11 @@ const Avatar = ({ url, name, size = 22 }: { url: string | null | undefined; name
 );
 
 export default function HomeFeed() {
-  const [tab, setTab] = useState<"for-you" | "following" | "tailored" | "publications">("for-you");
+  const [tab, setTab] = useState<"my-frontpage" | "following" | "publications">("my-frontpage");
   const [posts, setPosts] = useState<Post[]>([]);
   const [counts, setCounts] = useState<PostCounts>({});
   const [trending, setTrending] = useState<Post[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [interests, setInterests] = useState<string[]>([]);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [pubArticles, setPubArticles] = useState<any[]>([]);
@@ -74,12 +73,7 @@ export default function HomeFeed() {
           .then(({ data: blocked }) => {
             const ids = blocked?.map((b) => b.blocked_id) || [];
             setBlockedIds(ids);
-            supabase.from("profiles").select("interests").eq("id", user.id).single()
-              .then(({ data }) => {
-                const userInterests = data?.interests || [];
-                setInterests(userInterests);
-                loadFeed(user.id, "for-you", userInterests, ids);
-              });
+            loadMyFrontpage(user.id, ids);
           });
       }
       loadTrending();
@@ -101,69 +95,58 @@ export default function HomeFeed() {
     setCounts(newCounts);
   };
 
-  const loadFeed = async (
-    uid: string | null,
-    feedTab: string,
-    userInterests: string[] = interests,
-    blocked: string[] = blockedIds,
-  ) => {
+  const loadMyFrontpage = async (uid: string, blocked: string[] = blockedIds) => {
     setLoading(true);
     setCounts({});
-    const filter = (data: any[]) => data.filter((p) => !blocked.includes(p.author_id));
-    let loadedPosts: Post[] = [];
 
-    if (feedTab === "following" && uid) {
-      const { data: subs } = await supabase.from("subscriptions").select("author_id").eq("subscriber_id", uid);
-      const ids = subs?.map((s) => s.author_id) ?? [];
-      if (ids.length === 0) { setPosts([]); setLoading(false); return; }
-      const { data } = await supabase.from("posts")
+    const { data: scoredPosts, error } = await supabase.rpc("get_my_frontpage", {
+      p_user_id: uid,
+      p_limit: 30,
+    });
+
+    if (error || !scoredPosts || scoredPosts.length === 0) {
+      // Fallback to recent feed
+      const { data: fallback } = await supabase.from("posts")
         .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
-        .eq("published", true).in("author_id", ids)
-        .order("published_at", { ascending: false }).limit(20);
-      loadedPosts = filter((data as any) || []);
-
-    } else if (feedTab === "for-you") {
-      if (userInterests.length > 0) {
-        const { data } = await supabase.from("posts")
-          .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
-          .eq("published", true).overlaps("tags", userInterests)
-          .order("published_at", { ascending: false }).limit(20);
-        const filtered = filter((data as any) || []);
-        if (filtered.length < 5) {
-          const { data: fallback } = await supabase.from("posts")
-            .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
-            .eq("published", true).order("published_at", { ascending: false }).limit(20);
-          loadedPosts = filter((fallback as any) || []);
-        } else {
-          loadedPosts = filtered;
-        }
-      } else {
-        const { data } = await supabase.from("posts")
-          .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
-          .eq("published", true).order("published_at", { ascending: false }).limit(20);
-        loadedPosts = filter((data as any) || []);
-      }
-
-    } else if (feedTab === "tailored" && uid) {
-      const { data: scoredPosts, error } = await supabase.rpc("get_tailored_feed", { p_user_id: uid, p_limit: 20 });
-      if (error || !scoredPosts || scoredPosts.length === 0) {
-        const { data: fallback } = await supabase.from("posts")
-          .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
-          .eq("published", true).order("published_at", { ascending: false }).limit(20);
-        loadedPosts = filter((fallback as any) || []);
-      } else {
-        const authorIds = [...new Set(scoredPosts.map((p: any) => p.author_id))];
-        const { data: profiles } = await supabase.from("profiles")
-          .select("id, full_name, username, avatar_url").in("id", authorIds);
-        const profileMap: Record<string, any> = {};
-        profiles?.forEach((p) => { profileMap[p.id] = p; });
-        loadedPosts = filter(scoredPosts.map((p: any) => ({ ...p, profiles: profileMap[p.author_id] || null })));
-      }
+        .eq("published", true)
+        .order("published_at", { ascending: false })
+        .limit(30);
+      const filtered = (fallback as any[] || []).filter((p) => !blocked.includes(p.author_id));
+      setPosts(filtered);
+      setLoading(false);
+      loadCounts(filtered.map((p) => p.id));
+      return;
     }
 
-    setPosts(loadedPosts);
+    const authorIds = [...new Set(scoredPosts.map((p: any) => p.author_id))];
+    const { data: profiles } = await supabase
+      .from("profiles").select("id, full_name, username, avatar_url").in("id", authorIds);
+    const profileMap: Record<string, any> = {};
+    profiles?.forEach((p) => { profileMap[p.id] = p; });
+
+    const enriched = scoredPosts
+      .map((p: any) => ({ ...p, profiles: profileMap[p.author_id] || null }))
+      .filter((p: any) => !blocked.includes(p.author_id));
+
+    setPosts(enriched);
     setLoading(false);
-    loadCounts(loadedPosts.map((p) => p.id));
+    loadCounts(enriched.map((p: any) => p.id));
+  };
+
+  const loadFollowing = async (uid: string, blocked: string[] = blockedIds) => {
+    setLoading(true);
+    setCounts({});
+    const { data: subs } = await supabase.from("subscriptions").select("author_id").eq("subscriber_id", uid);
+    const ids = subs?.map((s) => s.author_id) ?? [];
+    if (ids.length === 0) { setPosts([]); setLoading(false); return; }
+    const { data } = await supabase.from("posts")
+      .select("*, profiles!posts_author_id_fkey(full_name, username, avatar_url)")
+      .eq("published", true).in("author_id", ids)
+      .order("published_at", { ascending: false }).limit(20);
+    const filtered = ((data as any) || []).filter((p: any) => !blocked.includes(p.author_id));
+    setPosts(filtered);
+    setLoading(false);
+    loadCounts(filtered.map((p: any) => p.id));
   };
 
   const loadTrending = async () => {
@@ -176,20 +159,13 @@ export default function HomeFeed() {
   const loadPublications = async (uid: string) => {
     setPubLoading(true);
     setPubArticles([]);
-
     const { data: subs } = await supabase
       .from("publisher_subscriptions")
       .select("publisher_id, publishers(id, name, logo_url, rss_url)")
       .eq("user_id", uid);
-
-    if (!subs || subs.length === 0) {
-      setPubLoading(false);
-      return;
-    }
-
+    if (!subs || subs.length === 0) { setPubLoading(false); return; }
     const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     const EDGE_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/fetch-rss`;
-
     const results = await Promise.allSettled(
       subs.map(async (sub: any) => {
         const publisher = sub.publishers;
@@ -197,40 +173,29 @@ export default function HomeFeed() {
         try {
           const res = await fetch(EDGE_URL, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${ANON_KEY}`,
-            },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ANON_KEY}` },
             body: JSON.stringify({ url: publisher.rss_url }),
           });
           const json = await res.json();
           return (json.articles || []).map((a: any) => ({
-            ...a,
-            publisher_name: publisher.name,
-            publisher_logo: publisher.logo_url,
+            ...a, publisher_name: publisher.name, publisher_logo: publisher.logo_url,
           }));
-        } catch {
-          return [];
-        }
+        } catch { return []; }
       })
     );
-
     const all: any[] = [];
-    results.forEach((r) => {
-      if (r.status === "fulfilled") all.push(...r.value);
-    });
+    results.forEach((r) => { if (r.status === "fulfilled") all.push(...r.value); });
     all.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
     setPubArticles(all);
     setPubLoading(false);
   };
 
-  const handleTabChange = (t: "for-you" | "following" | "tailored" | "publications") => {
+  const handleTabChange = (t: "my-frontpage" | "following" | "publications") => {
     setTab(t);
-    if (t === "publications") {
-      if (userId) loadPublications(userId);
-    } else if (userId) {
-      loadFeed(userId, t, interests, blockedIds);
-    }
+    if (!userId) return;
+    if (t === "my-frontpage") loadMyFrontpage(userId, blockedIds);
+    else if (t === "following") loadFollowing(userId, blockedIds);
+    else if (t === "publications") loadPublications(userId);
   };
 
   const formatDate = (d: string) =>
@@ -240,9 +205,8 @@ export default function HomeFeed() {
   const rest = posts.slice(1);
 
   const TABS = [
-    { key: "for-you", label: "For You" },
+    { key: "my-frontpage", label: "My FrontPage" },
     { key: "following", label: "Following" },
-    { key: "tailored", label: "Tailored" },
     { key: "publications", label: "Publications" },
   ] as const;
 
@@ -439,7 +403,7 @@ export default function HomeFeed() {
           )
         )}
 
-        {/* Other tabs */}
+        {/* My FrontPage + Following tabs */}
         {tab !== "publications" && (
           <>
             {loading ? (
@@ -459,14 +423,11 @@ export default function HomeFeed() {
             ) : posts.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-sm mb-3" style={{ color: "var(--text-tertiary)" }}>
-                  {tab === "following" ? "Subscribe to writers to see their posts here."
-                    : tab === "tailored" ? "Not enough activity yet. Like and save some articles first."
-                    : interests.length === 0 ? "Set your interests in Settings to personalise this feed."
-                    : "No posts matching your interests yet."}
+                  {tab === "following" ? "Subscribe to writers to see their posts here." : "No posts yet."}
                 </p>
-                {tab === "following" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Discover writers →</Link>}
-                {tab === "for-you" && interests.length === 0 && <Link href="/settings" className="text-sm font-medium" style={{ color: "#2979FF" }}>Update your interests →</Link>}
-                {tab === "tailored" && <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Explore articles →</Link>}
+                {tab === "following" && (
+                  <Link href="/explore" className="text-sm font-medium" style={{ color: "#2979FF" }}>Discover writers →</Link>
+                )}
               </div>
             ) : (
               <>
