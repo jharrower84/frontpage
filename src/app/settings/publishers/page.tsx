@@ -19,6 +19,7 @@ export default function PublishersSettingsPage() {
   const [followed, setFollowed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>("All");
   const [showRequest, setShowRequest] = useState(false);
   const [requestName, setRequestName] = useState("");
   const [requestWebsite, setRequestWebsite] = useState("");
@@ -75,6 +76,11 @@ export default function PublishersSettingsPage() {
     }
   };
 
+  const categories = ["All", ...Array.from(new Set(publishers.map((p) => p.category))).sort()];
+  const filteredPublishers = activeCategory === "All"
+    ? publishers
+    : publishers.filter((p) => p.category === activeCategory);
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-400 animate-spin" />
@@ -105,9 +111,26 @@ export default function PublishersSettingsPage() {
         </div>
       )}
 
+      {/* Category filter pills */}
+      <div className="flex gap-2 flex-wrap mb-6">
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className="text-xs font-semibold px-4 py-2 rounded-full transition-all hover:opacity-80"
+            style={activeCategory === cat
+              ? { backgroundColor: "#2979FF", color: "white" }
+              : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "var(--bg-secondary)" }
+            }
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
       {/* Publisher list */}
       <div className="space-y-3 mb-8">
-        {publishers.map((publisher) => {
+        {filteredPublishers.map((publisher) => {
           const isFollowed = followed.has(publisher.id);
           return (
             <div key={publisher.id} className="flex items-center gap-4 p-4 rounded-2xl"

@@ -1,4 +1,4 @@
-// v4
+// v8
 
 // @ts-ignore
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -21,6 +21,51 @@ function extractAttr(xml: string, tag: string, attr: string): string {
   const re = new RegExp(`<${tag}[^>]*${attr}="([^"]*)"`, 'i');
   const match = xml.match(re);
   return match ? match[1].trim() : '';
+}
+
+function decodeEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&#038;/g, '&')
+    .replace(/&#38;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8211;/g, '–')
+    .replace(/&#8212;/g, '—')
+    .replace(/&rsquo;/g, "'")
+    .replace(/&lsquo;/g, "'")
+    .replace(/&rdquo;/g, '"')
+    .replace(/&ldquo;/g, '"')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#\d+;/g, '')
+    .replace(/&[^;]+;/g, '');
+}
+
+function cleanHtml(raw: string): string {
+  // Decode entities first — some feeds (e.g. PopSugar) double-encode their HTML
+  const decoded = decodeEntities(raw);
+
+  // Strip leading link/image blocks before first <p>
+  const afterLeading = decoded.replace(/^[\s\S]*?(?=<p)/i, '');
+  const source = afterLeading.length > 20 ? afterLeading : decoded;
+
+  return decodeEntities(
+    source
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\w+=["'][^"']*["']?/g, '')
+      .replace(/https?:\/\/[^\s<>"]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 serve(async (req: Request) => {
@@ -55,7 +100,8 @@ serve(async (req: Request) => {
       const item = match[1];
 
       const title = extractCDATA(item, 'title');
-      const description = extractCDATA(item, 'description') || extractCDATA(item, 'content:encoded');
+      const rawDescription = extractCDATA(item, 'description') || extractCDATA(item, 'content:encoded') || '';
+
       const link = extractCDATA(item, 'link') ||
                    item.match(/<link[^>]*href="([^"]*)"[^>]*\/?>/i)?.[1] ||
                    item.match(/<link[^>]*>\s*(https?:\/\/[^\s<]*)\s*<\/link>/i)?.[1] ||
@@ -65,7 +111,7 @@ serve(async (req: Request) => {
       const rawImage = extractAttr(item, 'media:content', 'url') ||
                        extractAttr(item, 'media:thumbnail', 'url') ||
                        extractAttr(item, 'enclosure', 'url') ||
-                       description.match(/<img[^>]*src="([^"]*)"[^>]*\/?>/i)?.[1] ||
+                       rawDescription.match(/<img[^>]*src="([^"]*)"[^>]*\/?>/i)?.[1] ||
                        null;
 
       let coverImage: string | null = null;
@@ -81,11 +127,12 @@ serve(async (req: Request) => {
         }
       }
 
-      const stripped = description.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim();
-      const cleanDescription = stripped.length > 160
-        ? stripped.slice(0, 160).split(' ').slice(0, -1).join(' ')
-        : stripped;
-      const cleanTitle = title.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
+      const cleaned = cleanHtml(rawDescription);
+      const cleanDescription = cleaned.length > 160
+        ? cleaned.slice(0, 160).split(' ').slice(0, -1).join(' ')
+        : cleaned;
+
+      const cleanTitle = decodeEntities(title.replace(/<[^>]*>/g, '')).trim();
 
       if (cleanTitle && link) {
         articles.push({
@@ -99,6 +146,8 @@ serve(async (req: Request) => {
 
       if (articles.length >= 10) break;
     }
+
+    console.log(`Parsed ${articles.length} articles from ${url}`);
 
     return new Response(JSON.stringify({ articles }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
