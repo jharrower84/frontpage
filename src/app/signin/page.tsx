@@ -5,6 +5,10 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Sign In",
+};
+
 export default function SignInPage() {
   const router = useRouter();
 

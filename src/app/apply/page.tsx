@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+export const metadata = {
+  title: "Apply to Write",
+};
+
 const NICHES = ["Fashion", "Sustainability", "Luxury", "Streetwear", "Vintage", "Couture", "Beauty", "Photography", "Culture", "Business"];
 
 type Status = "loading" | "approved" | "pending" | "rejected" | "none";

@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Reading List",
+  description: "Your saved articles on FrontPage.",
+};
+
 interface SavedPost {
   id: string;
   post: {

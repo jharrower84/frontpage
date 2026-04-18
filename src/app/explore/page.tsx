@@ -6,6 +6,11 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import SubscribeButton from "@/app/components/SubscribeButton";
 
+export const metadata = {
+  title: "Explore",
+  description: "Discover fashion writers and articles across style, runway, streetwear and more.",
+};
+
 const FASHION_TAGS = [
   "Trends", "Runway", "Street Style", "Sustainability",
   "Business of Fashion", "Beauty", "Accessories", "Menswear",
