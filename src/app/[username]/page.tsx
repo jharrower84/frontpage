@@ -7,6 +7,10 @@ import SubscribeButton from "@/app/components/SubscribeButton";
 import BlockButton from "@/app/components/BlockButton";
 import ProfilePostList from "@/app/components/ProfilePostList";
 
+const BASE_URL = "https://www.frontpageapp.com";
+
+const RESERVED = ["signin", "signup", "explore", "dashboard", "notifications", "reading-list", "subscriptions", "settings", "profile", "p", "notes", "onboarding", "unsubscribe", "messages", "privacy", "data-deletion"];
+
 function VerifiedBadge() {
   return (
     <svg
@@ -30,6 +34,49 @@ function VerifiedBadge() {
   );
 }
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}) {
+  const { username } = await params;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, publication_name, bio, avatar_url, username")
+    .eq("username", username)
+    .single();
+
+  if (!profile) return { title: "FrontPage" };
+
+  const displayName = profile.publication_name || profile.full_name;
+  const description = profile.bio || `Read ${displayName}'s writing on FrontPage`;
+  const url = `${BASE_URL}/${username}`;
+
+  return {
+    title: displayName,
+    description,
+    alternates: {
+      canonical: url,
+    },
+    openGraph: {
+      title: `${displayName} on FrontPage`,
+      description,
+      type: "profile",
+      url,
+      siteName: "FrontPage",
+      images: profile.avatar_url
+        ? [{ url: profile.avatar_url, width: 400, height: 400, alt: displayName }]
+        : [{ url: `${BASE_URL}/og-default.png`, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary",
+      title: `${displayName} on FrontPage`,
+      description,
+      images: profile.avatar_url ? [profile.avatar_url] : [`${BASE_URL}/og-default.png`],
+    },
+  };
+}
+
 export default async function PublicWriterPage({
   params,
 }: {
@@ -37,8 +84,7 @@ export default async function PublicWriterPage({
 }) {
   const { username } = await params;
 
-  const reserved = ["signin", "signup", "explore", "dashboard", "notifications", "reading-list", "subscriptions", "settings", "profile", "p", "notes", "onboarding", "unsubscribe", "messages", "privacy", "data-deletion"];
-  if (reserved.includes(username)) notFound();
+  if (RESERVED.includes(username)) notFound();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -94,6 +140,21 @@ export default async function PublicWriterPage({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+
+      {/* JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Person",
+            name: profile.full_name,
+            url: `${BASE_URL}/${profile.username}`,
+            image: profile.avatar_url || undefined,
+            description: profile.bio || undefined,
+          }),
+        }}
+      />
 
       {user && <div className="h-14" />}
 

@@ -12,6 +12,8 @@ import RelatedArticles from "@/app/components/RelatedArticles";
 import ViewTracker from "@/app/components/ViewTracker";
 import ReportButton from "@/app/components/ReportButton";
 
+const BASE_URL = "https://www.frontpageapp.com";
+
 function getReadTime(html: string): string {
   const text = html?.replace(/<[^>]*>/g, "") || "";
   const words = text.trim().split(/\s+/).length;
@@ -55,31 +57,44 @@ export async function generateMetadata({
   const { slug } = await params;
   const { data: post } = await supabase
     .from("posts")
-    .select("title, subtitle, cover_image, profiles!posts_author_id_fkey(full_name)")
+    .select("title, subtitle, cover_image, published_at, tags, profiles!posts_author_id_fkey(full_name, username)")
     .eq("slug", slug)
     .eq("published", true)
     .single();
 
   if (!post) return { title: "FrontPage" };
 
-  const description = post.subtitle || "Read on FrontPage";
+  const description = post.subtitle || `Read ${post.title} on FrontPage`;
   const author = (post.profiles as any)?.full_name;
+  const authorUsername = (post.profiles as any)?.username;
+  const url = `${BASE_URL}/p/${slug}`;
 
   return {
-    title: `${post.title} — FrontPage`,
+    title: post.title,
     description,
+    alternates: {
+      canonical: url,
+    },
+    authors: author ? [{ name: author, url: `${BASE_URL}/${authorUsername}` }] : undefined,
+    keywords: post.tags || [],
     openGraph: {
       title: post.title,
       description,
       type: "article",
+      url,
+      siteName: "FrontPage",
       authors: author ? [author] : undefined,
-      images: post.cover_image ? [{ url: post.cover_image, width: 1200, height: 630 }] : [],
+      publishedTime: post.published_at,
+      tags: post.tags || [],
+      images: post.cover_image
+        ? [{ url: post.cover_image, width: 1200, height: 630, alt: post.title }]
+        : [{ url: `${BASE_URL}/og-default.png`, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: post.title,
       description,
-      images: post.cover_image ? [post.cover_image] : [],
+      images: post.cover_image ? [post.cover_image] : [`${BASE_URL}/og-default.png`],
     },
   };
 }
@@ -113,9 +128,8 @@ export default async function ArticlePage({
 
   const { data: { user } } = await serverSupabase.auth.getUser();
 
-  // In preview mode, allow the author to see unpublished posts
   let post: any = null;
- if (isPreview && user) {
+  if (isPreview && user) {
     const { data } = await serverSupabase
       .from("posts")
       .select("*, profiles!posts_author_id_fkey(id, full_name, username, avatar_url, bio, verified)")
@@ -125,7 +139,6 @@ export default async function ArticlePage({
     post = data;
   }
 
-  // Fall back to published post if not preview or not found
   if (!post) {
     const { data } = await supabase
       .from("posts")
@@ -169,6 +182,37 @@ export default async function ArticlePage({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+
+      {/* JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: post.title,
+            description: post.subtitle || "",
+            image: post.cover_image || undefined,
+            datePublished: post.published_at,
+            dateModified: post.edited_at || post.published_at,
+            author: {
+              "@type": "Person",
+              name: post.profiles?.full_name,
+              url: `${BASE_URL}/${post.profiles?.username}`,
+            },
+            publisher: {
+              "@type": "Organization",
+              name: "FrontPage",
+              url: BASE_URL,
+            },
+            mainEntityOfPage: {
+              "@type": "WebPage",
+              "@id": `${BASE_URL}/p/${post.slug}`,
+            },
+          }),
+        }}
+      />
+
       {!isPreview && <ViewTracker postId={post.id} />}
 
       {/* Preview banner */}
@@ -267,7 +311,7 @@ export default async function ArticlePage({
           </div>
         )}
 
-        {/* Desktop action bar — hide in preview */}
+        {/* Desktop action bar */}
         {!isPreview && (
           <div
             className="hidden lg:flex items-center gap-2 py-3 mb-8"
@@ -340,7 +384,7 @@ export default async function ArticlePage({
           </>
         )}
 
-        {/* Comments and related — hide in preview */}
+        {/* Comments and related */}
         {canViewSubscriberContent && !isPreview && (
           <>
             <div
@@ -391,7 +435,7 @@ export default async function ArticlePage({
         )}
       </article>
 
-      {/* Mobile floating action bar — hide in preview */}
+      {/* Mobile floating action bar */}
       {!isPreview && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-6 px-6 pointer-events-none">
           <div
