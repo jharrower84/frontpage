@@ -5,10 +5,6 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Editor from "@/app/components/Editor";
 
-export const metadata = {
-  title: "New Post",
-};
-
 const FASHION_TAGS = [
   "Trends", "Runway", "Street Style", "Sustainability",
   "Business of Fashion", "Beauty", "Accessories", "Menswear",

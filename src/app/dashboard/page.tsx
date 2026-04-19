@@ -5,10 +5,6 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export const metadata = {
-  title: "Dashboard",
-};
-
 interface Post {
   id: string;
   title: string;

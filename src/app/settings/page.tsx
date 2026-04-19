@@ -7,10 +7,6 @@ import Link from "next/link";
 import DeleteAccountButton from "@/app/components/DeleteAccountButton";
 import AppearanceModal from "@/app/components/AppearanceModal";
 
-export const metadata = {
-  title: "Settings",
-};
-
 interface BlockedUser {
   blocked_id: string;
   profiles: {
